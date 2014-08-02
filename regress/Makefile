@@ -6,12 +6,22 @@
 D=../deps
 J=${D}/js0n
 T=${D}/tap.c
+V=deps/vec
 
-all: test
-	./test
+CCFLAGS=-Wall
 
-test: test.c ${T}/tap.c ${T}/tap.h
-	gcc -o test test.c ${T}/tap.c
+
+all: dep interpolation
+	./interpolation
+
+interpolation: interpolation.c ${T}/tap.c ${T}/tap.h test.c test.h  ${J}/js0n.c ${J}/j0g.c 
+	gcc -o interpolation interpolation.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c test.c 
+
+dep: ${V}
+
+${V}:
+	clib install rxi/vec
+
 
 clean:
-	rm -f test
+	rm -f interpolation
