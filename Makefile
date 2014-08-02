@@ -1,16 +1,22 @@
-HBARS=https://raw.githubusercontent.com/wycats/handlebars.js/master
-            https://raw.githubusercontent.com/wycats/handlebars.js/master/src/handlebars.l
-LEX_SRC=${HBARS}/src/handlebars.l
-YACC_SRC=${HBARS}/src/handlebars.yy
+GITHUB=https://raw.githubusercontent.com
+SPEC=${GITHUB}/mustache/spec/master
 
-get: handlebars.l handlebars.yy
 
-handlebars.l:
-	curl ${LEX_SRC} > $@
+# Mustache specifications.
+getspecs: specs/interpolation.j
 
-handlebars.yy:
-	curl ${YACC_SRC} > $@
+specs/%.json:
+	curl ${SPEC}/$@ > t
+	mv t $@
 
+
+test:
+	(cd regress ; make)
+
+clean:
+	(cd regress ; make clean)
+
+	
 
 
 
