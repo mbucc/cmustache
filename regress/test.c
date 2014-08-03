@@ -42,7 +42,7 @@ ftos(const char *filename)
 	char		*json;
 	long		sz;
 	FILE		*fp;
-	
+
 	if ((fp = fopen(filename, "r")) == NULL)
 		err(EX_NOINPUT, "Can't read %s", filename);
 
@@ -149,7 +149,7 @@ get_test(char *tests, unsigned short *index)
 }
 
 test_vec_t
-parse_tests(char *json) 
+parse_tests(char *json)
 {
 	test_vec_t rval;
 	unsigned short	*index = 0;
@@ -171,7 +171,7 @@ parse_tests(char *json)
 	free(index);
 
 	return rval;
-	
+
 }
 
 
@@ -190,6 +190,28 @@ get_tests(const char *spec_file)
 	return rval;
 }
 
+const char *
+dumptest(struct test *t)
+{
+	char			*buf;
+	size_t		sz = 0;
+
+	sz = strlen(t->json);
+	sz += strlen(t->template);
+	sz += strlen(t->expected);
+	sz += strlen(t->description);
+	sz += 100;
+
+	buf = calloc(sz, 1);
+	if (!buf)
+		err(ENOMEM, "out of memory");
+
+	sprintf(buf, "<struct test: template='%s', json='%s', expected='%s'>",
+		t->template, t->json, t->expected);
+
+	return buf;
+}
+
 
 int
 main (int argc, char *argv[])
@@ -197,25 +219,34 @@ main (int argc, char *argv[])
 	struct test	*test;
 	char		*result;
 	int		i = 0;
+	int		rval = 0;
 
 	test_vec_t tests = get_tests(argv[1]);
 
-	plan(tests.length);
+	plan(tests.length * 2);
+
+printf("\n\n------------ TESTS\n");
 
 	vec_foreach(&tests, test, i) {
 
 		if (i < 2) {
 
-			render( test->template, test->json, &result );
+			rval = render( test->template, test->json, &result );
 
-			is(result, test->expected, test->description);
+
+			ok(!rval, "%s returned %d", test->description, rval)
+				|| printf("# %s\n", dumptest(test));
+
+			is(result, test->expected, test->description)
+				|| printf("# %s\n", dumptest(test));
 
 		}
 
 		else {
 
-			skip(1, 1);
+			skip(1, 2);
 
+			ok(0);
 			ok(0);
 
 			end_skip;
