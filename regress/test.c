@@ -275,7 +275,7 @@ main (int argc, char *argv[])
 
 	vec_foreach(&tests, test, i) {
 
-		if (i == 0) {
+		if (i < 2) {
 
 			render( test->template, test->json, &result );
 
