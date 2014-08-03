@@ -11,9 +11,9 @@
 
 #include "deps/vec/vec.h"
 
-#include "../deps/js0n/j0g.h"
-#include "../deps/js0n/js0n.h"
-#include "../deps/tap.c/tap.h"
+#include "j0g.h"
+#include "js0n.h"
+#include "tap.h"
 
 #include "../cmustache.h"
 
@@ -75,76 +75,6 @@ ftos(const char *filename)
 	}
 
 	return json;
-}
-
-
-unsigned int
-count(const char *s, char c)
-{
-	unsigned int	n = 0;
-
-	for(; *s; s++) {
-		/*
-		 * Don't overflow n; abort instead.
-		 */
-		if (n >= UINT_MAX)
-			errx(EX_DATAERR, "JSON input is too large");
-		n += (*s == c);
-	}
-
-	return n;
-}
-
-unsigned int
-over_estimate_keyvalue_pairs(const char *json, unsigned short **pp)
-{
-	unsigned int rval;
-		/*
-		 * (one key + one value) x (one offset + one length) = 4
-		 */
-	unsigned int entriesPerComma = 4;
-		/*
-		 * We need at least one extra slot (js0n zero-terminates
-		 * the array).  Add some more for safety ...
-		 */
-	unsigned int extra = 21;
-
-	rval = count(json, ',');
-
-		/*
-		 * The array holds short ints, but the array index
-		 * is an unsigned int, so we check against UINT_MAX.
-		 */
-
-	if (rval + extra > UINT_MAX / entriesPerComma)
-		errx(EX_DATAERR, "JSON input is too large");
-
-	rval *= entriesPerComma;
-	rval += extra;
-
-	if ((*pp = calloc(rval, sizeof(unsigned int))) == NULL)
-		err(ENOMEM, "Can't allocate %u ints", rval);
-
-	return rval;
-
-}
-
-void
-index_json(const char *json, unsigned short **indexp)
-{
-	int rc;
-	unsigned int isz;
-
-	free(*indexp);
-
-	isz = over_estimate_keyvalue_pairs(json, indexp);
-
-	j0g(json, *indexp, isz);
-
-	if (**indexp == 0) {
-		errx(EX_DATAERR, "Error parsing the JSON that starts: %.350s", json);
-	}
-
 }
 
 char *
@@ -224,7 +154,6 @@ parse_tests(char *json)
 	test_vec_t rval;
 	unsigned short	*index = 0;
 	char *tests = 0;
-	char *test = 0;
 
 	index_json(json, &index);
 

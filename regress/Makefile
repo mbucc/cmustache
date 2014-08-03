@@ -8,8 +8,9 @@ J=${D}/js0n
 T=${D}/tap.c
 V=deps/vec
 
-CCFLAGS=-Wall
+CC=gcc
 
+CFLAGS=-Wall -I../deps/js0n -I../deps/tap.c  -I./deps/vec
 
 all: interpolation
 
@@ -19,7 +20,7 @@ interpolation: test
 
 
 test: dep test.c test.h ${T}/tap.c ${T}/tap.h ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ../cmustache.h ../cmustache.c
-	gcc -o test test.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ../cmustache.c
+	$(CC) $(CFLAGS) -o test test.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ../cmustache.c
 
 dep: ${V}
 
