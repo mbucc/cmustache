@@ -19,105 +19,222 @@
 #define MAX_INDEX_LEN			2 * MAX_KEYVALUE_PAIRS + 1
 
 long
-filesize( const char *name, FILE *fp)
+filesize( const char *filename, FILE *fp)
 {
 	long		rval;
 
 	if (fseek(fp, 0, SEEK_END) != 0)
-		err(errno, "Can't seek to end of %s", name);
+		err(errno, "Can't seek to end of %s", filename);
 
 	rval = ftell(fp);
 
 	if (fseek(fp, 0L, SEEK_SET) != 0)
-		err(errno, "Can't seek back to beginning of %s", name);
+		err(errno, "Can't seek back to beginning of %s", filename);
 
 	return rval;
 }
 
-unsigned char *
-ftos(const char *name, unsigned int *len)
+char *
+ftos(const char *filename)
 {
-	unsigned char	*json;
-	long			sz;
-	FILE			*fp;
+	char		*json;
+	long		sz;
+	FILE		*fp;
 	
-	if ((fp = fopen(name, "r")) == NULL)
-		err(EX_NOINPUT, "Can't read %s", name);
+	if ((fp = fopen(filename, "r")) == NULL)
+		err(EX_NOINPUT, "Can't read %s", filename);
 
-	sz = filesize(name, fp);
+	sz = filesize(filename, fp);
 
-	if ((json = calloc(sz + 1, 1)) == NULL)
-		err(ENOMEM, "Can't allocate %lu bytes", sz + 1);
+		/*
+		 * js0n stores offset's as unsigned shorts, so we can
+		 * only handle files with that many bytes.
+		 */
+
+	if (sz > USHRT_MAX)
+		errx(EX_DATAERR, "JSON file is larger than %d", USHRT_MAX);
+
+	if ((json = calloc(sz, 1)) == NULL)
+		err(ENOMEM, "Can't allocate %lu bytes", sz);
 
 	if (fread(json, 1, sz, fp) < sz)
-		err(errno, "Error reading %s", name);
+		err(errno, "Error reading %s", filename);
 
 	fclose(fp);
 
-	if (sz > UINT_MAX - 1)
-		err(EX_DATAERR, "JSON files is larger than %d", UINT_MAX);
+	if (json[sz - 1] != 0) {
+		char *json2 = calloc(sz + 1, 1);
+		if (!json2)
+			err(ENOMEM, "Can't allocate %lu bytes", sz + 1);
+		memcpy(json2, json, sz);
+		free(json);
+		json2[sz] = 0;
+		json = json2;
+	}
 
-	*len = (unsigned int) sz;
-	
 	return json;
 }
 
+
 unsigned int
-count(const unsigned char *s, char c)
+count(const char *s, char c)
 {
 	unsigned int	n = 0;
 
-	for(; *s; n += (*s++ == c)) ;
+	for(; *s; s++) {
+		if (n >= UINT_MAX)
+			errx(EX_DATAERR, "JSON input is too large");
+		n += (*s == c);
+	}
 
 	return n;
 }
 
-char *
-parse_tests(unsigned char *json, unsigned int len)
+unsigned int
+over_estimate_keyvalue_pairs(const char *json, unsigned short **pp)
 {
-	unsigned int	ilen;
-	unsigned short	*index;
-	int			rval;
+	unsigned int rval;
 
-		/*
-		 * If we size index array too small, js0n croaks.
-		 */
-	ilen = count(json, ',');
-	ilen *= 2;
-	if (ilen > MAX_INDEX_LEN)
-		ilen = MAX_INDEX_LEN;
-	ilen += 1;
+	rval = count(json, ',');
+	if (rval + 1 > UINT_MAX / 2)
+		errx(EX_DATAERR, "JSON input is too large");
+	rval *= 4;
+	rval += 21;
 
-	if ((index = calloc(ilen, sizeof(unsigned int))) == NULL)
-		err(ENOMEM, "Can't allocate %u ints", ilen);
+	if ((*pp = calloc(rval, sizeof(unsigned int))) == NULL)
+		err(ENOMEM, "Can't allocate %u ints", rval);
 
-	rval = js0n(json, len, index, ilen);
-	if (rval > 0) {
-		json[51] = 0;
-		err(EX_DATAERR, "Error %d parsing the JSON that starts: %s", rval, json);
-	}
-
-		/*
-		 * XXX: think through the (char *) cast and UTF8.
-		 */
-
-	return j0g_str("tests", (char *) json, index);
+	return rval;
 
 }
+
+void
+index_json(const char *json, unsigned short **indexp)
+{
+	int rc;
+	unsigned int isz;
+
+	free(*indexp);
+
+	isz = over_estimate_keyvalue_pairs(json, indexp);
+
+	j0g(json, *indexp, isz);
+
+	if (**indexp == 0) {
+		errx(EX_DATAERR, "Error parsing the JSON that starts: %.350s", json);
+	}
+
+}
+
+char *
+get(char *json, unsigned short *index, const char *key)
+{
+	char			*rval = 0;
+	int			idx = 0;
+	unsigned short	offset = 0;
+	unsigned short	length = 0;
+
+	idx = j0g_val(key, json, index);
+
+	if (idx > 0) {
+		offset = index[idx];
+		length = index[idx + 1];
+		json[offset + length] = 0;
+		rval = json + offset;
+	}
+
+	return rval;
+
+}
+
+struct test *
+get_test(char *tests, unsigned short *index)
+{
+	struct test *rval = 0;
+	char *testjson = 0;
+	unsigned short	*testindex = 0;
+	unsigned short	offset = 0;
+	unsigned short	length = 0;
+
+	offset = *index;
+	length = *(index + 1);
+
+	tests[offset + length] = 0;
+	testjson = tests + offset;
+
+	index_json(testjson, &testindex);
+
+	if (! *testindex)
+		errx(1, "Error parsing %s\n", testjson);
+
+	if ( (rval = calloc(1, sizeof(*rval) ) ) == NULL )
+		err(ENOMEM, "can't allocate a struct test");
+
+	/*
+	 * This is what the tests section of a Mustache spec looks like:
+	 *
+	 *	[
+	 *	        {
+	 *	            "data": {},
+	 *	            "desc": "Mustache-free templates should render as-is.",
+	 *	            "expected": "Hello from {Mustache}!\n",
+	 *	            "name": "No Interpolation",
+	 *	            "template": "Hello from {Mustache}!\n"
+	 *	        },
+	 *		...
+	 *	]
+	 *
+	 */
+
+	rval->jsondata = get(testjson, testindex, "data");
+	rval->template = get(testjson, testindex, "template");
+	rval->expected = get(testjson, testindex, "expected");
+	rval->description = get(testjson, testindex, "desc");
+
+	free(testindex);
+
+	return rval;
+
+}
+
+test_vec_t
+parse_tests(char *json) 
+{
+	test_vec_t rval;
+	unsigned short	*index = 0;
+	char *tests = 0;
+	char *test = 0;
+
+	index_json(json, &index);
+
+	tests = get(json, index, "tests");
+
+	index_json(tests, &index);
+
+	vec_init(&rval);
+
+	for (unsigned short *i = index; *i; i += 2)
+
+		vec_push(&rval, get_test(tests, i));
+
+	free(index);
+
+	return rval;
+	
+}
+
 
 test_vec_t
 get_tests(const char *spec_file) 
 {
 	test_vec_t	rval;
-	unsigned char	*json;
-	char			*tests;
-	unsigned int	len;
+	char 			*json = NULL;
 
-	vec_init(&rval);
+	json = ftos(spec_file);
 
-	json = ftos(spec_file, &len);
+	rval = parse_tests(json);
 
-	tests = parse_tests(json, len);
+	free(json);
 
 	return rval;
 }

@@ -14,8 +14,8 @@ CCFLAGS=-Wall
 all: dep interpolation
 	./interpolation
 
-interpolation: interpolation.c ${T}/tap.c ${T}/tap.h test.c test.h  ${J}/js0n.c ${J}/j0g.c 
-	gcc -o interpolation interpolation.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c test.c 
+interpolation: interpolation.c ${T}/tap.c ${T}/tap.h test.c test.h  ${J}/js0n.c ${J}/j0g.c ${V}/vec.c
+	gcc -o interpolation interpolation.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c ${V}/vec.c test.c 
 
 dep: ${V}
 
