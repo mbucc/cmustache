@@ -7,3 +7,5 @@ int	render(const char* template, char *json, char **resultp);
 int	index_json(const char *json, unsigned short **indexp);
 
 int	size_index(const char *json, unsigned short **indexp, unsigned int *iszp);
+
+int	get(char *json, unsigned short *index, const char *key, char **val);

@@ -18,8 +18,14 @@
 		/*
 		 * Add -DDEUG to CFLAGS in Makefile to turn on debugging output.
 		 */
+#ifdef DEBUG
+#define DEBUG_PRINT 1
+#else
+#define DEBUG_PRINT 0
+#endif
+
 #define debug_printf(fmt, ...) \
-        do { if (DEBUG) fprintf(stderr, "%s:%d:%s(): " fmt, __FILE__, \
+        do { if (DEBUG_PRINT) fprintf(stderr, "%s:%d:%s(): " fmt, __FILE__, \
                                 __LINE__, __func__, __VA_ARGS__); } while (0)
 
 
@@ -107,12 +113,55 @@ index_json(const char *json, unsigned short **indexp)
 
 }
 
+// In-place modification of JSON string.
+// Find key, and stick a null at the end of it's value.
+// Update *val to point to the start of the value.
+// If key not found, *val is set to NULL.
+int
+get(char *json, unsigned short *index, const char *key, char **val)
+{
+	int		idx = 0;
+	int		rval = 0;
+	unsigned short	offset = 0;
+	unsigned short	length = 0;
+
+	idx = j0g_val(key, json, index);
+
+	*val = 0;
+	if (idx > 0) {
+		offset = index[idx];
+		length = index[idx + 1];
+		json[offset + length] = 0;
+		*val = json + offset;
+	}
+
+	debug_printf("\"%s\" returns \"%s\"\n", key, *val);
+
+	return rval;
+
+}
+
+
 // Look up value in JSON for the given key, and insert it into the result.
 int
-insert_tag(char *key, char **htmlp, char *json, unsigned short *indexp)
+insert_tag(char *key, char **qhtml, char *json, unsigned short *index)
 {
-	// Stub.
-	return 1;
+	int 		rval = 0;
+	char		*val;
+
+	rval = get(json, index, key, &val);
+
+	debug_printf("*qhtml = \"%s\"\n", val);
+
+	if (!rval) {
+
+		strcpy(*qhtml, val);
+
+		*qhtml += strlen(*qhtml);
+
+	}
+
+	return rval;
 }
 
 // Given a mustache template and some JSON, render the HTML.
@@ -260,7 +309,9 @@ render(const char *template, char *json, char **html)
 	l_yes_html:
 		go = gohtml;
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_html");
-		insert_tag(tag, html, json, index);
+		debug_printf("before insert, html = \"%s\"\n", html);
+		insert_tag(tag, &qhtml, json, index);
+		debug_printf("after insert, html = \"%s\"\n", html);
 		memset(tag, 0, MAX_TAGSZ);
 		goto l_loop;
 

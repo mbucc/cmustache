@@ -10,7 +10,7 @@ V=deps/vec
 
 CC=gcc
 
-CFLAGS=-Wall -I../deps/js0n -I../deps/tap.c  -I./deps/vec
+CFLAGS=-Wall -I../deps/js0n -I../deps/tap.c  -I./deps/vec	# -DDEBUG
 
 all: interpolation
 

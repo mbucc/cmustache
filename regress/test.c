@@ -77,27 +77,6 @@ ftos(const char *filename)
 	return json;
 }
 
-char *
-get(char *json, unsigned short *index, const char *key)
-{
-	char			*rval = 0;
-	int			idx = 0;
-	unsigned short	offset = 0;
-	unsigned short	length = 0;
-
-	idx = j0g_val(key, json, index);
-
-	if (idx > 0) {
-		offset = index[idx];
-		length = index[idx + 1];
-		json[offset + length] = 0;
-		rval = json + offset;
-	}
-
-	return rval;
-
-}
-
 struct test *
 get_test(char *tests, unsigned short *index)
 {
@@ -137,10 +116,10 @@ get_test(char *tests, unsigned short *index)
 	 *
 	 */
 
-	rval->json = get(testjson, testindex, "data");
-	rval->template = get(testjson, testindex, "template");
-	rval->expected = get(testjson, testindex, "expected");
-	rval->description = get(testjson, testindex, "desc");
+	get(testjson, testindex, "data", &rval->json);
+	get(testjson, testindex, "template", &rval->template);
+	get(testjson, testindex, "expected", &rval->expected);
+	get(testjson, testindex, "desc", &rval->description);
 
 	free(testindex);
 
@@ -157,7 +136,7 @@ parse_tests(char *json)
 
 	index_json(json, &index);
 
-	tests = get(json, index, "tests");
+	get(json, index, "tests", &tests);
 
 	index_json(tests, &index);
 
