@@ -82,6 +82,9 @@ count(const char *s, char c)
 	unsigned int	n = 0;
 
 	for(; *s; s++) {
+		/*
+		 * Don't overflow n; abort instead.
+		 */
 		if (n >= UINT_MAX)
 			errx(EX_DATAERR, "JSON input is too large");
 		n += (*s == c);
@@ -94,12 +97,28 @@ unsigned int
 over_estimate_keyvalue_pairs(const char *json, unsigned short **pp)
 {
 	unsigned int rval;
+		/*
+		 * (one key + one value) x (one offset + one length) = 4
+		 */
+	unsigned int entriesPerComma = 4;
+		/*
+		 * We need at least one extra slot (js0n zero-terminates
+		 * the array).  Add some more for safety ...
+		 */
+	unsigned int extra = 21;
 
 	rval = count(json, ',');
-	if (rval + 1 > UINT_MAX / 2)
+
+		/*
+		 * The array holds short ints, but the array index
+		 * is an unsigned int, so we check against UINT_MAX.
+		 */
+
+	if (rval + extra > UINT_MAX / entriesPerComma)
 		errx(EX_DATAERR, "JSON input is too large");
-	rval *= 4;
-	rval += 21;
+
+	rval *= entriesPerComma;
+	rval += extra;
 
 	if ((*pp = calloc(rval, sizeof(unsigned int))) == NULL)
 		err(ENOMEM, "Can't allocate %u ints", rval);
