@@ -1,7 +1,7 @@
-digraph finite_state_machine {
+digraph State {
 	rankdir=LR;
 	size="8,5"
-	node [shape = doublecircle,width=1.25,fixedsize=true]; "rval != 0", start, "rval == 0";
+	node [shape = doublecircle,width=1.25,fixedsize=true]; start, end;
 	node [shape = circle,width=1.25,fixedsize=true];
 
 	start		-> parsejson;
@@ -22,5 +22,8 @@ digraph finite_state_machine {
 	tag		-> htmlp		[ label = "'}'" ];
 	tag		-> "rval != 0"		[ label = "tagsz >= 1023" ];
 	tag		-> tag			[ label = "other" ];
+
+	"rval == 0"	-> end;
+	"rval != 0"	-> end;
 
 }
