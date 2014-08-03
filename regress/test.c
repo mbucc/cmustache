@@ -6,17 +6,19 @@
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sysexits.h>
 
 #include "deps/vec/vec.h"
 
-#include "../deps/js0n/js0n.h"
 #include "../deps/js0n/j0g.h"
+#include "../deps/js0n/js0n.h"
+#include "../deps/tap.c/tap.h"
+
+#include "../cmustache.h"
 
 #include "test.h"
 
-#define MAX_KEYVALUE_PAIRS		10000
-#define MAX_INDEX_LEN			2 * MAX_KEYVALUE_PAIRS + 1
 
 long
 filesize( const char *filename, FILE *fp)
@@ -205,7 +207,7 @@ get_test(char *tests, unsigned short *index)
 	 *
 	 */
 
-	rval->jsondata = get(testjson, testindex, "data");
+	rval->json = get(testjson, testindex, "data");
 	rval->template = get(testjson, testindex, "template");
 	rval->expected = get(testjson, testindex, "expected");
 	rval->description = get(testjson, testindex, "desc");
@@ -232,9 +234,10 @@ parse_tests(char *json)
 
 	vec_init(&rval);
 
-	for (unsigned short *i = index; *i; i += 2)
+	for (unsigned short *i = index; *i; i += 2) {
 
 		vec_push(&rval, get_test(tests, i));
+	}
 
 	free(index);
 
@@ -244,7 +247,7 @@ parse_tests(char *json)
 
 
 test_vec_t
-get_tests(const char *spec_file) 
+get_tests(const char *spec_file)
 {
 	test_vec_t	rval;
 	char 			*json = NULL;
@@ -256,4 +259,42 @@ get_tests(const char *spec_file)
 	free(json);
 
 	return rval;
+}
+
+
+int
+main (int argc, char *argv[])
+{
+	struct test	*test;
+	char		*result;
+	int		i = 0;
+
+	test_vec_t tests = get_tests(argv[1]);
+
+	plan(tests.length);
+
+	vec_foreach(&tests, test, i) {
+
+		if (i == 0) {
+
+			render( test->template, test->json, &result );
+
+			is(result, test->expected, test->description);
+
+		}
+
+		else {
+
+			skip(1, 1);
+
+			ok(0);
+
+			end_skip;
+
+		}
+
+
+	}
+
+	done_testing();
 }

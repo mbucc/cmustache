@@ -11,11 +11,15 @@ V=deps/vec
 CCFLAGS=-Wall
 
 
-all: dep interpolation
-	./interpolation
+all: interpolation
 
-interpolation: interpolation.c ${T}/tap.c ${T}/tap.h test.c test.h  ${J}/js0n.c ${J}/j0g.c ${V}/vec.c
-	gcc -o interpolation interpolation.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c ${V}/vec.c test.c 
+
+interpolation: test
+	./test '../specs/interpolation.json'
+
+
+test: dep test.c test.h ${T}/tap.c ${T}/tap.h ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ../cmustache.h ../cmustache.c
+	gcc -o test test.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ../cmustache.c
 
 dep: ${V}
 
@@ -24,4 +28,4 @@ ${V}:
 
 
 clean:
-	rm -f interpolation
+	rm -f test

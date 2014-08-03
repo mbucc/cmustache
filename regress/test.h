@@ -1,5 +1,5 @@
 struct test {
-	char		*jsondata;
+	char		*json;
 	char		*template;
 	char		*expected;
 	char		*description;
