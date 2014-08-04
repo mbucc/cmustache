@@ -12,14 +12,13 @@ CCFLAGS=-Wall
 #
 #---------------------------------------------------
 
-dep: deps/tap.c deps/js0n
-
-deps/tap.c:
-	clib install thlorenz/tap.c   
+dep: deps/js0n deps/chtmlescape
 
 deps/js0n:
 	clib install mbucc/js0n
 
+deps/chtmlescape:
+	clib install mbucc/chtmlescape
 
 #---------------------------------------------------
 #

@@ -5,28 +5,29 @@
 
 D=../deps
 J=${D}/js0n
-T=${D}/tap.c
+E=${D}/chtmlescape
 V=deps/vec
+T=deps/tap.c
 
 CC=gcc
 
-CFLAGS=-Wall -I../deps/js0n -I../deps/tap.c  -I./deps/vec	# -DDEBUG
+CFLAGS=-Wall -I../deps/js0n -I../deps/chtmlescape -I./deps/tap.c -I./deps/vec		# -DDEBUG
 
 all: interpolation
-
 
 interpolation: test
 	./test '../specs/interpolation.json'
 
+test: dep test.c test.h ../cmustache.h ../cmustache.c ${T}/tap.c ${T}/tap.h ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ${E}/htmlescape.c
+	$(CC) $(CFLAGS) -o test test.c ../cmustache.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ${E}/htmlescape.c
 
-test: dep test.c test.h ${T}/tap.c ${T}/tap.h ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ../cmustache.h ../cmustache.c
-	$(CC) $(CFLAGS) -o test test.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ../cmustache.c
-
-dep: ${V}
+dep: ${V} ${T}
 
 ${V}:
 	clib install rxi/vec
 
+${T}:
+	clib install thlorenz/tap.c   
 
 clean:
 	rm -f test

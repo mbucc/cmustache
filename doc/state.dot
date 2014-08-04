@@ -22,6 +22,8 @@ digraph State {
 	tag		-> htmlp		[ label = "'}'" ];
 	tag		-> "rval != 0"		[ label = "tagsz >= 1023" ];
 	tag		-> tag			[ label = "other" ];
+	tag		-> tag			[ label = "'&', '\"', '<', '>'\n(escape these)" ];
+
 
 	"rval == 0"	-> end;
 	"rval != 0"	-> end;

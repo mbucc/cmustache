@@ -8,6 +8,7 @@
 
 #include "js0n.h"
 #include "j0g.h"
+#include "htmlescape.h"
 
 #include "cmustache.h"
 
@@ -29,6 +30,17 @@
                                 __LINE__, __func__, __VA_ARGS__); } while (0)
 
 
+// Return the number of times the character c appears in the string s.
+unsigned long
+count(const char *s, char c)
+{
+	unsigned long		n = 0;
+
+	for (; *s; s++, n += (*s == c));
+
+	return n;
+}
+
 // Compute the size of an array
 // that is large enough to hold one offset and one length value
 // for each key and each value in the JSON.
@@ -37,9 +49,8 @@
 int
 size_index(const char *json, unsigned short **indexp, unsigned int *iszp)
 {
-	const char	*p;
 	int		rval = 0;
-	char		c = ',';
+	long		n = 0;
 
 		/*
 		 * (one key + one value) x (one offset + one length) = 4
@@ -60,12 +71,12 @@ size_index(const char *json, unsigned short **indexp, unsigned int *iszp)
 		 * on the number of key/value pairs - 1.
 		 */
 
-	*iszp = 0;
-	for(p = json; *p && !rval; p++) {
-		if (*iszp >= UINT_MAX)
-			rval = EX_TOO_MANY_KEYVAL_PAIRS;
-		*iszp += (*p == c);
-	}
+
+	n = count(json, ',');
+	if (n >= UINT_MAX)
+		rval = EX_TOO_MANY_KEYVAL_PAIRS;
+
+	*iszp = (unsigned int) n;
 
 		/*
 		 * The array holds short ints, but the array index
@@ -144,22 +155,28 @@ get(char *json, unsigned short *index, const char *key, char **val)
 
 // Look up value in JSON for the given key, and insert it into the result.
 int
-insert_tag(char *key, char **qhtml, char *json, unsigned short *index)
+insert_value(char *key, char **qhtml, char *json, unsigned short *index)
 {
 	int 		rval = 0;
-	char		*val;
+	char		*val = 0;
+	char		*escaped = 0;
 
 	rval = get(json, index, key, &val);
 
-	debug_printf("*qhtml = \"%s\"\n", val);
+	if (!rval)
+
+		rval = htmlescape(val, &escaped);
 
 	if (!rval) {
 
-		strcpy(*qhtml, val);
+printf("escaped = '%s'\n", escaped);
+
+		strcpy(*qhtml, escaped);
 
 		*qhtml += strlen(*qhtml);
-
 	}
+
+	free(escaped);
 
 	return rval;
 }
@@ -169,7 +186,6 @@ int
 render(const char *template, char *json, char **html)
 {
 	char		tag[MAX_TAGSZ] = {0};
-	char		*dbgfmt = "\t\t--> %s (%s)";
 	const char	*cur= 0;
 	char		prev;
 	char		*qhtml = 0;
@@ -200,8 +216,8 @@ render(const char *template, char *json, char **html)
 
 	static void *gotag[] =
 	{
-		[0 ... 124]		= &&l_tag,
-		[ '}' ]			= &&l_htmlp,
+		[0 ... 124 ]	= &&l_tag,
+		[ '}' ]			= &&l_htmlp,	// 125
 		[126 ... 255]	= &&l_tag
 	};
 
@@ -266,7 +282,6 @@ render(const char *template, char *json, char **html)
 		goto l_loop;
 
 
-
 	l_tag:
 		if (qtag - tag >= MAX_TAGSZ - 1)
 			rval = EX_TAG_TOO_LONG;
@@ -309,9 +324,9 @@ render(const char *template, char *json, char **html)
 	l_yes_html:
 		go = gohtml;
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_html");
-		debug_printf("before insert, html = \"%s\"\n", html);
-		insert_tag(tag, &qhtml, json, index);
-		debug_printf("after insert, html = \"%s\"\n", html);
+		debug_printf("before insert, html = \"%s\"\n", *html);
+		rval = insert_value(tag, &qhtml, json, index);
+		debug_printf("after insert, html = \"%s\"\n", *html);
 		memset(tag, 0, MAX_TAGSZ);
 		goto l_loop;
 

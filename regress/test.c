@@ -208,7 +208,7 @@ printf("\n\n------------ TESTS\n");
 
 	vec_foreach(&tests, test, i) {
 
-		if (i < 2) {
+		if (i < 3) {
 
 			rval = render( test->template, test->json, &result );
 
