@@ -11,4 +11,3 @@ int	size_index(const char *json, unsigned short **indexp, unsigned int *iszp);
 
 int	get(char *json, unsigned short *index, const char *key, char **val);
 
-int	escape(const char *in, char **out);
