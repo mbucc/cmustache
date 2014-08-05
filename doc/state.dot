@@ -1,8 +1,8 @@
 digraph State {
 	rankdir=LR;
 	size="8,5"
-	node [shape = doublecircle,width=1.25,fixedsize=true]; start, end;
-	node [shape = circle,width=1.25,fixedsize=true];
+	node [shape = doublecircle,width=1,fixedsize=true]; start, end;
+	node [shape = circle,width=1,fixedsize=true];
 
 	start		-> parsejson;
 
@@ -12,12 +12,25 @@ digraph State {
 	html		-> tagp		[ label = "'{'" ];
 	html		-> html			[ label = "other" ];
 	html		-> "rval == 0"		[ label = "'\0'" ];
+	html 	-> "rval != 0"		[ label = "char in [0 - 8, 11, 12, 14 - 31, 127, 128-159]" ];
 
-	tagp		-> tag			[ label = "'{'" ];
+	tagp		-> tagpp			[label = "{" ];
 	tagp		-> html			[label = "other" ];
+
+	tagpp	-> rawtag			[label = "{" ];
+	tagpp	-> tag			[label = "other" ];
 
 	htmlp		-> html			[ label = "'}'" ];
 	htmlp		-> tag			[label = "other" ];
+
+	rawtag	-> exitp		[label = "}" ];
+	rawtag	-> rawtag		[label = "other" ];
+
+	exitp		-> exitpp		[label = "}" ];
+	exitp		-> rawtag		[label = "other" ];
+
+	exitpp	-> html		[label = "}" ];
+	exitpp	-> rawtag		[label = "other" ];
 
 	tag		-> htmlp		[ label = "'}'" ];
 	tag		-> "rval != 0"		[ label = "tagsz >= 1023" ];
