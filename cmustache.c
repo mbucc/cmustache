@@ -167,9 +167,7 @@ insert_value(char *key, char **qhtml, char *json, unsigned short *index)
 
 		rval = htmlescape(val, &escaped);
 
-	if (!rval) {
-
-printf("escaped = '%s'\n", escaped);
+	if (!rval && escaped) {
 
 		strcpy(*qhtml, escaped);
 
