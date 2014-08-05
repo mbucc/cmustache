@@ -1,41 +1,41 @@
 digraph State {
-	rankdir=LR;
 	size="8,5"
+	#rankdir=LR;
 	node [shape = doublecircle,width=1,fixedsize=true]; start, end;
 	node [shape = circle,width=1,fixedsize=true];
-
 	start		-> parsejson;
 
 	parsejson	-> html		[label = "other" ];
-	parsejson	-> "rval != 0"	[label = "21 + (kv pairs * 4) >= UINT_MAX" ];
+	parsejson	-> "rval != 0"	[label = "21 + (kv pairs * 4) >= UINT_MAX",style=dashed ];
 
 	html		-> tagp		[ label = "'{'" ];
 	html		-> html			[ label = "other" ];
-	html		-> "rval == 0"		[ label = "'\0'" ];
-	html 	-> "rval != 0"		[ label = "char in [0 - 8, 11, 12, 14 - 31, 127, 128-159]" ];
 
-	tagp		-> tagpp			[label = "{" ];
+	tagp		-> rawtagp		[label = "{" ];
 	tagp		-> html			[label = "other" ];
 
-	tagpp	-> rawtag			[label = "{" ];
-	tagpp	-> tag			[label = "other" ];
+	rawtagp	-> rawtag			[label = "{" ];
+	rawtagp	-> tag			[label = "other" ];
 
-	htmlp		-> html			[ label = "'}'" ];
-	htmlp		-> tag			[label = "other" ];
+	xtagp		-> html			[ label = "'}'" ];
+	xtagp		-> tag			[label = "other" ];
 
-	rawtag	-> exitp		[label = "}" ];
+	rawtag	-> xrawpp		[label = "}" ];
 	rawtag	-> rawtag		[label = "other" ];
 
-	exitp		-> exitpp		[label = "}" ];
-	exitp		-> rawtag		[label = "other" ];
+	xrawpp		-> xrawp		[label = "}" ];
+	xrawpp		-> rawtag		[label = "other" ];
 
-	exitpp	-> html		[label = "}" ];
-	exitpp	-> rawtag		[label = "other" ];
+	xrawp	-> html		[label = "}" ];
+	xrawp	-> rawtag		[label = "other" ];
 
-	tag		-> htmlp		[ label = "'}'" ];
-	tag		-> "rval != 0"		[ label = "tagsz >= 1023" ];
+	tag		-> xtagp		[ label = "'}'" ];
+	tag		-> "rval != 0"		[ label = "tagsz >= 1023",style=dashed ];
 	tag		-> tag			[ label = "other" ];
 	tag		-> tag			[ label = "'&', '\"', '<', '>'\n(escape these)" ];
+
+	allnodes -> "rval != 0"		[ label = "char in [1 - 8, 11, 12, 14 - 31, 127-159]",style=dashed ];
+	allnodes -> "rval == 0"		[ label = "char == 0" ];
 
 
 	"rval == 0"	-> end;

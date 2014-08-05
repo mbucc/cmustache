@@ -155,7 +155,7 @@ get(char *json, unsigned short *index, const char *key, char **val)
 
 // Look up value in JSON for the given key, and insert it into the result.
 int
-insert_value(char *key, char **qhtml, char *json, unsigned short *index)
+insert_value(char *key, char **qhtml, char *json, unsigned short *index, int raw)
 {
 	int 		rval = 0;
 	char		*val = 0;
@@ -163,20 +163,48 @@ insert_value(char *key, char **qhtml, char *json, unsigned short *index)
 
 	rval = get(json, index, key, &val);
 
-	if (!rval)
-
-		rval = htmlescape(val, &escaped);
+	if (!rval) {
+		if (raw)
+			escaped = val;
+		else
+			rval = htmlescape(val, &escaped);
+	}
 
 	if (!rval && escaped) {
-
 		strcpy(*qhtml, escaped);
-
 		*qhtml += strlen(*qhtml);
 	}
 
-	free(escaped);
+	if (!raw)
+		free(escaped);
 
 	return rval;
+}
+
+int 
+in(char c, char lo, char hi)
+{
+	return (c >= lo) && (c <= hi);
+}
+
+// http://en.wikipedia.org/wiki/Character_encodings_in_HTML#Illegal_characters
+int
+badchar(char c)
+{
+	return  in(c, 1, 8)
+		|| in(c, 11, 12)
+		|| in(c, 14, 31)
+		|| in(c, 127, 159)
+		;
+}
+
+int
+add_to_tag(char **qtag, char *tag, char c)
+{
+	if (*qtag - tag >= MAX_TAGSZ - 1)
+		return EX_TAG_TOO_LONG;
+	*(*qtag)++ = c;
+	return 0;
 }
 
 // Given a mustache template and some JSON, render the HTML.
@@ -186,6 +214,7 @@ render(const char *template, char *json, char **html)
 	char		tag[MAX_TAGSZ] = {0};
 	const char	*cur= 0;
 	char		prev;
+	char		prevprev;
 	char		*qhtml = 0;
 	char		*qtag = 0;
 	unsigned short	*index = 0;
@@ -208,22 +237,50 @@ render(const char *template, char *json, char **html)
 	static void *gotagp[] =
 	{
 		[0 ... 122]	= &&l_no_tag,
-		[ '{' ]		= &&l_yes_tag,
+		[ '{' ]		= &&l_rawtagp,
 		[124 ... 255]	= &&l_no_tag
+	};
+
+	static void *gorawtagp[] =
+	{
+		[0 ... 122]	= &&l_no_rawtag,
+		[ '{' ]		= &&l_yes_rawtag,
+		[124 ... 255]	= &&l_no_rawtag
 	};
 
 	static void *gotag[] =
 	{
 		[0 ... 124 ]	= &&l_tag,
-		[ '}' ]			= &&l_htmlp,	// 125
+		[ '}' ]			= &&l_xtagp,	// 125
 		[126 ... 255]	= &&l_tag
 	};
 
-	static void *gohtmlp[] =
+	static void *goxtagp[] =
 	{
-		[0 ... 124]	= &&l_no_html,
-		[ '}' ]		= &&l_yes_html,
-		[126 ... 255]	= &&l_no_html
+		[0 ... 124]	= &&l_no_xtag,
+		[ '}' ]		= &&l_yes_xtag,
+		[126 ... 255]	= &&l_no_xtag
+	};
+
+	static void *gorawtag[] =
+	{
+		[0 ... 124 ]	= &&l_rawtag,
+		[ '}' ]			= &&l_xrawpp,	// 125
+		[126 ... 255]	= &&l_rawtag
+	};
+
+	static void *goxrawpp[] =
+	{
+		[0 ... 124]	= &&l_no_xrawp,
+		[ '}' ]		= &&l_yes_xrawp,
+		[126 ... 255]	= &&l_no_xrawp
+	};
+
+	static void *goxrawp[] =
+	{
+		[0 ... 124]	= &&l_no_xraw,
+		[ '}' ]		= &&l_yes_xraw,
+		[126 ... 255]	= &&l_no_xraw
 	};
 
 		/*
@@ -244,7 +301,6 @@ render(const char *template, char *json, char **html)
 			rval = ENOMEM;
 
 		qhtml = *html;
-		qtag = tag;
 	}
 
 		/*
@@ -261,10 +317,13 @@ render(const char *template, char *json, char **html)
 	for(cur = template; *cur && !rval; cur++)
 	{
 		debug_printf("%c\n", *cur);
-		goto *go[(unsigned char) *cur];
+		if (badchar(*cur))
+			rval = EX_INVALID_CHAR;
+		else
+			goto *go[(unsigned char) *cur];
 		l_loop:;
 		prev = *cur;
-
+		prevprev = prev;
 	}
 
 	free(index);
@@ -279,15 +338,6 @@ render(const char *template, char *json, char **html)
 		*qhtml++ = *cur;
 		goto l_loop;
 
-
-	l_tag:
-		if (qtag - tag >= MAX_TAGSZ - 1)
-			rval = EX_TAG_TOO_LONG;
-		else
-			*qtag++ = *cur;
-		goto l_loop;
-
-
 	l_tagp:
 		go = gotagp;
 		debug_printf("\t\t--> %s (%s)\n", "gotagp", "l_tagp");
@@ -300,33 +350,89 @@ render(const char *template, char *json, char **html)
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_no_tag");
 		goto l_loop;
 
-	l_yes_tag:
+	l_rawtagp:
+		go = gorawtagp;
+		debug_printf("\t\t--> %s (%s)\n", "gorawtagp", "l_rawtagp");
+		goto l_loop;
+
+	l_no_rawtag:;
+		qtag = tag;
+		rval = add_to_tag(&qtag, tag, *cur);
 		go = gotag;
-		debug_printf("\t\t--> %s (%s)\n", "gotag", "l_yes_tag");
+		debug_printf("\t\t--> %s (%s)\n", "gotag", "l_no_rawtag");
+		goto l_loop;;
+
+	l_yes_rawtag:;
+		qtag = tag;
+		go = gorawtag;
+		debug_printf("\t\t--> %s (%s)\n", "gorawtag", "l_yes_rawtag");
 		goto l_loop;
 
-
-
-	l_htmlp:
-		go = gohtmlp;
-		debug_printf("\t\t--> %s (%s)\n", "gohtmlp", "l_htmlp");
+	l_tag:
+		rval = add_to_tag(&qtag, tag, *cur);
 		goto l_loop;
 
-	l_no_html:
-		*qtag++ = prev;
-		*qtag++ = *cur;
+	l_xtagp:
+		go = goxtagp;
+		debug_printf("\t\t--> %s (%s)\n", "goxtagp", "l_xtagp");
+		goto l_loop;
+
+	l_no_xtag:
+		rval = add_to_tag(&qtag, tag, prev);
+		if (!rval)
+			rval = add_to_tag(&qtag, tag, *cur);
 		go = gotag;
 		debug_printf("\t\t--> %s (%s)\n", "gotag", "l_no_html");
 		goto l_loop;
 
-	l_yes_html:
+	l_yes_xtag:
 		go = gohtml;
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_html");
 		debug_printf("before insert, html = \"%s\"\n", *html);
-		rval = insert_value(tag, &qhtml, json, index);
+		rval = insert_value(tag, &qhtml, json, index, 0);
 		debug_printf("after insert, html = \"%s\"\n", *html);
 		memset(tag, 0, MAX_TAGSZ);
 		goto l_loop;
 
+	l_rawtag:
+		rval = add_to_tag(&qtag, tag, *cur);
+		goto l_loop;
+
+	l_xrawpp:
+		go = goxrawpp;
+		debug_printf("\t\t--> %s (%s)\n", "goxrawpp", "l_xrawpp");
+		goto l_loop;
+
+	l_no_xrawp:
+		rval = add_to_tag(&qtag, tag, prev);
+		if (!rval)
+			rval = add_to_tag(&qtag, tag, *cur);
+		go = gorawtag;
+		debug_printf("\t\t--> %s (%s)\n", "gorawtag", "l_no_xrawp");
+		goto l_loop;
+
+	l_yes_xrawp:
+		go = goxrawp;
+		debug_printf("\t\t--> %s (%s)\n", "goxrawp", "l_yes_xrawp");
+		goto l_loop;
+
+	l_no_xraw:
+		rval = add_to_tag(&qtag, tag, prevprev);;
+		if (!rval)
+			rval = add_to_tag(&qtag, tag, prev);
+		if (!rval)
+			rval = add_to_tag(&qtag, tag, *cur);
+		go = gorawtag;
+		debug_printf("\t\t--> %s (%s)\n", "gorawtag", "l_no_xraw");
+		goto l_loop;
+
+	l_yes_xraw:
+		go = gohtml;
+		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xraw");
+		debug_printf("before insert raw, html = \"%s\"\n", *html);
+		rval = insert_value(tag, &qhtml, json, index, 1);
+		debug_printf("after insert raw, html = \"%s\"\n", *html);
+		memset(tag, 0, MAX_TAGSZ);
+		goto l_loop;
 
 }

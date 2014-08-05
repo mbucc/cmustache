@@ -204,14 +204,11 @@ main (int argc, char *argv[])
 
 	plan(tests.length * 2);
 
-printf("\n\n------------ TESTS\n");
-
 	vec_foreach(&tests, test, i) {
 
-		if (i < 3) {
+		if (i < 4 ) {
 
 			rval = render( test->template, test->json, &result );
-
 
 			ok(!rval, "%s returned %d", test->description, rval)
 				|| printf("# %s\n", dumptest(test));

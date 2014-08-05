@@ -2,6 +2,7 @@
 #define	EX_TOO_MANY_KEYVAL_PAIRS		4202
 #define	EX_JSON_PARSE_ERROR			4203
 #define	EX_LOGIC_ERROR				4204
+#define	EX_INVALID_CHAR				4205
 
 int	render(const char* template, char *json, char **resultp);
 
