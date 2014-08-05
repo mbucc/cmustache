@@ -179,14 +179,14 @@ dumptest(struct test *t)
 	sz += strlen(t->template);
 	sz += strlen(t->expected);
 	sz += strlen(t->description);
-	sz += 100;
+	sz += 200;
 
 	buf = calloc(sz, 1);
 	if (!buf)
 		err(ENOMEM, "out of memory");
 
-	sprintf(buf, "<struct test: template='%s', json='%s', expected='%s'>",
-		t->template, t->json, t->expected);
+	sprintf(buf, "<struct test:\ndescription=%s\ntemplate='%s'\njson='%s'\nexpected='%s'>",
+		t->description, t->template, t->json, t->expected);
 
 	return buf;
 }
@@ -206,7 +206,7 @@ main (int argc, char *argv[])
 
 	vec_foreach(&tests, test, i) {
 
-		if (i < 4 ) {
+		if (i < 5 ) {
 
 			rval = render( test->template, test->json, &result );
 

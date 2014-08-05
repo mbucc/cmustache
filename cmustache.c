@@ -161,6 +161,16 @@ insert_value(char *key, char **qhtml, char *json, unsigned short *index, int raw
 	char		*val = 0;
 	char		*escaped = 0;
 
+		/*
+		 * A tag that starts with an ampersand
+		 * is the same as a triple brace.
+		 */
+
+	if (key[0] == '&') {
+		raw = 1;
+		key = key + 1;
+	}
+
 	rval = get(json, index, key, &val);
 
 	if (!rval) {
