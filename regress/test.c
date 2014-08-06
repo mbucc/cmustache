@@ -206,7 +206,7 @@ main (int argc, char *argv[])
 
 	vec_foreach(&tests, test, i) {
 
-		if (i < 5 ) {
+		if (i < 15 ) {
 
 			rval = render( test->template, test->json, &result );
 
