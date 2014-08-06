@@ -11,22 +11,38 @@ digraph State {
 	html		-> tagp		[ label = "'{'" ];
 	html		-> html			[ label = "other" ];
 
-	tagp		-> rawtagp		[label = "{" ];
+	tagp		-> rawtagp		[label = "'{'" ];
 	tagp		-> html			[label = "other" ];
 
-	rawtagp	-> rawtag			[label = "{" ];
+	rawtagp	-> rawtag			[label = "'{'" ];
+	rawtagp	-> pushsec		[label = "'#'" ];
+	rawtagp	-> popsec			[label = "'/'" ];
 	rawtagp	-> tag			[label = "other" ];
+
+	pushsec 	-> pushsec		[label = "other" ];
+	pushsec	-> xpushsecp		[label = "'}'" ];
+
+	xpushsecp	-> html		[label = "'}'" ];
+	xpushsecp	-> pushsec	[label = "other" ];
+
+	popsec 	-> popsec		[label = "other" ];
+	popsec	-> xpopsecp		[label = "'}'" ];
+
+	xpopsecp	-> html		[label = "'}'" ];
+	xpopsecp	-> popsec	[label = "other" ];
+	xpopsecp	-> "rval != 0"	[label = "pop != last push",style=dashed ];
+
 
 	xtagp		-> html			[ label = "'}'" ];
 	xtagp		-> tag			[label = "other" ];
 
-	rawtag	-> xrawpp		[label = "}" ];
+	rawtag	-> xrawpp		[label = "'}'" ];
 	rawtag	-> rawtag		[label = "other" ];
 
-	xrawpp		-> xrawp		[label = "}" ];
+	xrawpp		-> xrawp		[label = "'}'" ];
 	xrawpp		-> rawtag		[label = "other" ];
 
-	xrawp	-> html		[label = "}" ];
+	xrawp	-> html		[label = "'}'" ];
 	xrawp	-> rawtag		[label = "other" ];
 
 	tag		-> xtagp		[ label = "'}'" ];

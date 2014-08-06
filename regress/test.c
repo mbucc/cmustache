@@ -197,7 +197,7 @@ main (int argc, char *argv[])
 {
 	struct test	*test;
 	char		*result;
-	int		i = 0;
+	int		i, test_number = 0;
 	int		rval = 0;
 
 	test_vec_t tests = get_tests(argv[1]);
@@ -206,7 +206,12 @@ main (int argc, char *argv[])
 
 	vec_foreach(&tests, test, i) {
 
-		if (i < 15 ) {
+		/*
+		 * Test numbers output by tap are one-based.
+		 */
+		test_number = i + 1;
+
+		if (test_number < 16 ) {
 
 			rval = render( test->template, test->json, &result );
 
