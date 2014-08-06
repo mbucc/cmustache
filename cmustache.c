@@ -9,6 +9,7 @@
 #include "js0n.h"
 #include "j0g.h"
 #include "htmlescape.h"
+#include "vec.h"
 
 #include "cmustache.h"
 
@@ -217,16 +218,62 @@ add_to_tag(char **qtag, char *tag, char c)
 	return 0;
 }
 
+		/*
+		 * As we drill deeper into sub and subsections,
+		 * just mash them together with a period delimiter.
+		 *
+		 * Dotted names are section short-hand in the spec,
+		 * so this should work.
+		 *
+		 * While not specified in the interpolation spec,
+		 * we do prohibit periods in the section names.
+		 */
+
+int
+push_section(char *tag,  vec_str_t sections)
+{
+	int rval = 0;
+	char *sec = 0;
+
+	sec = strcpy(tag);
+	if (!sec)
+		rval = ENOMEM;
+
+	vec_push(sections, sec);
+
+	return rval;
+}
+
+
+int
+pop_section(char *tag, vec_str_t sections)
+{
+	int rval = 0;
+	char *last = 0;
+
+	last = vec_pop(sections);
+
+	if (!strcmp(tag, last) != 0)
+		rval = EX_POP_DOES_NOT_MATCH;
+
+	free(last);
+
+	return rval;
+}
+
+
 // Given a mustache template and some JSON, render the HTML.
 int
 render(const char *template, char *json, char **html)
 {
 	char		tag[MAX_TAGSZ] = {0};
+	char		sections[MAX_TAGSZ] = {0};
 	const char	*cur= 0;
 	char		prev;
 	char		prevprev;
 	char		*qhtml = 0;
 	char		*qtag = 0;
+	char		*qsections = 0;
 	unsigned short	*index = 0;
 	int		rval = 0;
 
@@ -253,9 +300,45 @@ render(const char *template, char *json, char **html)
 
 	static void *gorawtagp[] =
 	{
-		[0 ... 122]	= &&l_no_rawtag,
-		[ '{' ]		= &&l_yes_rawtag,
-		[124 ... 255]	= &&l_no_rawtag
+		[0 ... 34]	= &&l_no_rawtag,
+		[ '#' ]		= &&l_yes_push,	// 35
+		[36 ... 46]	= &&l_no_rawtag,
+		[ '/' ]		= &&l_yes_pop,	// 47
+		[48 ... 124]	= &&l_no_rawtag,
+		[ '{' ]		= &&l_yes_rawtag,	// 125
+		[126 ... 255]	= &&l_no_rawtag
+	};
+
+	static void *gopush[] =
+	{
+		[0 ... 45 ]	= &&l_push,
+		[ '.' ]		= &&l_bad_section,	// 46
+		[47 ... 124 ]	= &&l_push,
+		[ '}' ]		= &&l_xpushp,	// 125
+		[126 ... 255]	= &&l_push
+	};
+
+	static void *goxpushp[] =
+	{
+		[0 ... 124 ]	= &&l_no_xpush,
+		[ '}' ]		= &&l_yes_xpush,	// 125
+		[126 ... 255]	= &&l_no_xpush
+	};
+
+	static void *gopop[] =
+	{
+		[0 ... 45 ]	= &&l_pop,
+		[ '.' ]		= &&l_bad_section,	// 46
+		[47 ... 124 ]	= &&l_pop,
+		[ '}' ]		= &&l_xpopp,	// 125
+		[126 ... 255]	= &&l_pop
+	};
+
+	static void *goxpopp[] =
+	{
+		[0 ... 124 ]	= &&l_no_xpop,
+		[ '}' ]			= &&l_yes_xpop,	// 125
+		[126 ... 255]	= &&l_no_xpop
 	};
 
 	static void *gotag[] =
@@ -289,7 +372,7 @@ render(const char *template, char *json, char **html)
 	static void *goxrawp[] =
 	{
 		[0 ... 124]	= &&l_no_xraw,
-		[ '}' ]		= &&l_yes_xraw,
+		[ '}' ]		= &&l_yes_xraw,	// 125
 		[126 ... 255]	= &&l_no_xraw
 	};
 
@@ -331,7 +414,7 @@ render(const char *template, char *json, char **html)
 			rval = EX_INVALID_CHAR;
 		else
 			goto *go[(unsigned char) *cur];
-		l_loop:;
+		l_loop:
 		prev = *cur;
 		prevprev = prev;
 	}
@@ -343,6 +426,10 @@ render(const char *template, char *json, char **html)
 		/*
 		 * The state transitions.
 		 */
+
+	l_bad_section:
+		rval = EX_SECTION_NAME_HAS_DOT;
+		goto l_loop;
 
 	l_html:
 		*qhtml++ = *cur;
@@ -365,21 +452,82 @@ render(const char *template, char *json, char **html)
 		debug_printf("\t\t--> %s (%s)\n", "gorawtagp", "l_rawtagp");
 		goto l_loop;
 
-	l_no_rawtag:;
+	l_no_rawtag:
 		qtag = tag;
 		rval = add_to_tag(&qtag, tag, *cur);
 		go = gotag;
 		debug_printf("\t\t--> %s (%s)\n", "gotag", "l_no_rawtag");
-		goto l_loop;;
+		goto l_loop;
 
-	l_yes_rawtag:;
+	l_yes_push:
+		qtag = tag;
+		go = gopush;
+		debug_printf("\t\t--> %s (%s)\n", "gopush", "l_yes_push");
+		goto l_loop;
+
+	l_yes_pop:
+		qtag = tag;
+		go = gopop;
+		debug_printf("\t\t--> %s (%s)\n", "gopop", "l_yes_pop");
+		goto l_loop;
+
+	l_yes_rawtag:
 		qtag = tag;
 		go = gorawtag;
 		debug_printf("\t\t--> %s (%s)\n", "gorawtag", "l_yes_rawtag");
 		goto l_loop;
 
+	l_push:
+		/* FALLTHROUGH */
+
+	l_pop:
+		/* FALLTHROUGH */
+
+	l_rawtag:
+		/* FALLTHROUGH */
+
 	l_tag:
 		rval = add_to_tag(&qtag, tag, *cur);
+		goto l_loop;
+
+	l_xpushp:
+		go = goxpushp;
+		debug_printf("\t\t--> %s (%s)\n", "goxpushp", "l_xpushp");
+		goto l_loop;
+
+	l_no_xpush:
+		rval = add_to_tag(&qtag, tag, prev);
+		if (!rval)
+			rval = add_to_tag(&qtag, tag, *cur);
+		go = gopush;
+		debug_printf("\t\t--> %s (%s)\n", "gopush", "l_no_xpush");
+		goto l_loop;
+
+	l_yes_xpush:
+		go = gohtml;
+		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xpush");
+		rval = push_section(tag, &qsections, sections);
+		memset(tag, 0, MAX_TAGSZ);
+		goto l_loop;
+
+	l_xpopp:
+		go = goxpopp;
+		debug_printf("\t\t--> %s (%s)\n", "goxpopp", "l_xpopp");
+		goto l_loop;
+
+	l_no_xpop:
+		rval = add_to_tag(&qtag, tag, prev);
+		if (!rval)
+			rval = add_to_tag(&qtag, tag, *cur);
+		go = gopop;
+		debug_printf("\t\t--> %s (%s)\n", "gopop", "l_no_xpop");
+		goto l_loop;
+
+	l_yes_xpop:
+		go = gohtml;
+		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xpop");
+		rval = pop_section(tag, &qsections, sections);
+		memset(tag, 0, MAX_TAGSZ);
 		goto l_loop;
 
 	l_xtagp:
@@ -392,20 +540,16 @@ render(const char *template, char *json, char **html)
 		if (!rval)
 			rval = add_to_tag(&qtag, tag, *cur);
 		go = gotag;
-		debug_printf("\t\t--> %s (%s)\n", "gotag", "l_no_html");
+		debug_printf("\t\t--> %s (%s)\n", "gotag", "l_no_xtag");
 		goto l_loop;
 
 	l_yes_xtag:
 		go = gohtml;
-		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_html");
+		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xtag");
 		debug_printf("before insert, html = \"%s\"\n", *html);
 		rval = insert_value(tag, &qhtml, json, index, 0);
 		debug_printf("after insert, html = \"%s\"\n", *html);
 		memset(tag, 0, MAX_TAGSZ);
-		goto l_loop;
-
-	l_rawtag:
-		rval = add_to_tag(&qtag, tag, *cur);
 		goto l_loop;
 
 	l_xrawpp:
