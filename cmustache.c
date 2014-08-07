@@ -230,33 +230,64 @@ add_to_tag(char **qtag, char *tag, char c)
 		 */
 
 int
-push_section(char *tag,  vec_str_t sections)
+push_section(char *tag,  char *section)
 {
 	int rval = 0;
-	char *sec = 0;
 
-	sec = strcpy(tag);
-	if (!sec)
-		rval = ENOMEM;
+	if (strlen(tag) + strlen(section) + 1 >= MAX_TAGSZ)
+		rval = EX_TAG_TOO_LONG;
 
-	vec_push(sections, sec);
+	if (!rval) {
+		if (strlen(section))
+			strcat(section, ".");
+		strcat(section, tag);
+	}
+
+	debug_printf("		push_section('%s') --> '%s'\n", tag, section);
 
 	return rval;
 }
 
 
 int
-pop_section(char *tag, vec_str_t sections)
+pop_section(char *tag, char *section)
 {
+	char *p = 0;
 	int rval = 0;
-	char *last = 0;
+	char *popped = 0;
 
-	last = vec_pop(sections);
+	if (!section) {
+		if (tag)
+			rval = EX_POP_DOES_NOT_MATCH;
+		else
 
-	if (!strcmp(tag, last) != 0)
-		rval = EX_POP_DOES_NOT_MATCH;
+		/*
+		 * Ignore empty tags.
+		 */
 
-	free(last);
+			return rval;
+	}
+
+	if (!rval) {
+		p = strrchr(section, '.');
+		if (p) {
+			popped = p + 1;
+			p++;
+		}
+		else {
+			p = section;
+			popped = section;
+		}
+
+		if (strcmp(tag, popped) != 0) {
+			rval = EX_POP_DOES_NOT_MATCH;
+		}
+		else {
+			*p = 0;
+		}
+	}
+
+	debug_printf("		pop_section('%s') --> '%s'\n", tag, section);
 
 	return rval;
 }
@@ -267,13 +298,12 @@ int
 render(const char *template, char *json, char **html)
 {
 	char		tag[MAX_TAGSZ] = {0};
-	char		sections[MAX_TAGSZ] = {0};
+	char		section[MAX_TAGSZ] = {0};
 	const char	*cur= 0;
 	char		prev;
 	char		prevprev;
 	char		*qhtml = 0;
 	char		*qtag = 0;
-	char		*qsections = 0;
 	unsigned short	*index = 0;
 	int		rval = 0;
 
@@ -304,9 +334,9 @@ render(const char *template, char *json, char **html)
 		[ '#' ]		= &&l_yes_push,	// 35
 		[36 ... 46]	= &&l_no_rawtag,
 		[ '/' ]		= &&l_yes_pop,	// 47
-		[48 ... 124]	= &&l_no_rawtag,
-		[ '{' ]		= &&l_yes_rawtag,	// 125
-		[126 ... 255]	= &&l_no_rawtag
+		[48 ... 122]	= &&l_no_rawtag,
+		[ '{' ]		= &&l_yes_rawtag,	// 123
+		[124 ... 255]	= &&l_no_rawtag
 	};
 
 	static void *gopush[] =
@@ -506,7 +536,7 @@ render(const char *template, char *json, char **html)
 	l_yes_xpush:
 		go = gohtml;
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xpush");
-		rval = push_section(tag, &qsections, sections);
+		rval = push_section(tag, section);
 		memset(tag, 0, MAX_TAGSZ);
 		goto l_loop;
 
@@ -526,7 +556,7 @@ render(const char *template, char *json, char **html)
 	l_yes_xpop:
 		go = gohtml;
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xpop");
-		rval = pop_section(tag, &qsections, sections);
+		rval = pop_section(tag, section);
 		memset(tag, 0, MAX_TAGSZ);
 		goto l_loop;
 

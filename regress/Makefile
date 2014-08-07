@@ -11,7 +11,7 @@ T=deps/tap.c
 
 CC=gcc
 
-CFLAGS=-Wall -I../deps/js0n -I../deps/chtmlescape -I./deps/tap.c -I./deps/vec #-DDEBUG
+CFLAGS=-Wall -I../deps/js0n -I../deps/chtmlescape -I./deps/tap.c -I./deps/vec -DDEBUG
 
 all: interpolation
 
