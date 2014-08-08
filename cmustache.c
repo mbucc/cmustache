@@ -235,6 +235,20 @@ get(const char *json, const char *key, char **val)
 
 	debug_printf("get('%s', '%s', '%s')\n", json, key, *val);
 
+
+	if (!json || !strlen(json)) {
+
+		/*
+		 * We hit a "falsey" value in the parent json.
+		 * Return the empty string for the value.
+		 */
+
+		*val = 0;
+
+		return 0;
+
+	}
+
 	if ( (p = strchr(key, SEC_DELIM) ) == 0) {
 
 		rval = valcpy(json, key, val);
@@ -248,9 +262,12 @@ get(const char *json, const char *key, char **val)
 
 		rval = split_key(key, &parent_key, &child_key);
 
-		if (!rval)
+		if (!rval) {
 
 			rval = valcpy(json, parent_key, &parent_json);
+
+
+		}
 
 		if (!rval)
 
