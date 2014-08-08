@@ -11,9 +11,16 @@ T=deps/tap.c
 
 CC=gcc
 
-CFLAGS=-Wall -I../deps/js0n -I../deps/chtmlescape -I./deps/tap.c -I./deps/vec -DDEBUG
+CFLAGS=-Wall -I../deps/js0n -I../deps/chtmlescape -I./deps/tap.c -I./deps/vec #-DDEBUG
 
-all: interpolation
+all: json interpolation
+
+json: test_json
+	./test_json
+
+test_json: test_json.c ../cmustache.c ../cmustache.h ${T}/tap.c ${T}/tap.h ${J}/js0n.c ${J}/j0g.c 
+	$(CC) $(CFLAGS) -o test_json test_json.c ../cmustache.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c ${E}/htmlescape.c
+
 
 interpolation: test
 	./test '../specs/interpolation.json'
@@ -30,4 +37,4 @@ ${T}:
 	clib install thlorenz/tap.c   
 
 clean:
-	rm -f test
+	rm -f test test_json

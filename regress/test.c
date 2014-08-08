@@ -82,7 +82,6 @@ get_test(char *tests, unsigned short *index)
 {
 	struct test *rval = 0;
 	char *testjson = 0;
-	unsigned short	*testindex = 0;
 	unsigned short	offset = 0;
 	unsigned short	length = 0;
 
@@ -91,11 +90,6 @@ get_test(char *tests, unsigned short *index)
 
 	tests[offset + length] = 0;
 	testjson = tests + offset;
-
-	index_json(testjson, &testindex);
-
-	if (! *testindex)
-		errx(1, "Error parsing %s\n", testjson);
 
 	if ( (rval = calloc(1, sizeof(*rval) ) ) == NULL )
 		err(ENOMEM, "can't allocate a struct test");
@@ -116,12 +110,10 @@ get_test(char *tests, unsigned short *index)
 	 *
 	 */
 
-	get(testjson, testindex, "data", &rval->json);
-	get(testjson, testindex, "template", &rval->template);
-	get(testjson, testindex, "expected", &rval->expected);
-	get(testjson, testindex, "desc", &rval->description);
-
-	free(testindex);
+	get(testjson, "data", &rval->json);
+	get(testjson, "template", &rval->template);
+	get(testjson, "expected", &rval->expected);
+	get(testjson, "desc", &rval->description);
 
 	return rval;
 
@@ -134,9 +126,7 @@ parse_tests(char *json)
 	unsigned short	*index = 0;
 	char *tests = 0;
 
-	index_json(json, &index);
-
-	get(json, index, "tests", &tests);
+	get(json, "tests", &tests);
 
 	index_json(tests, &index);
 
@@ -211,7 +201,7 @@ main (int argc, char *argv[])
 		 */
 		test_number = i + 1;
 
-		if (test_number == 15 ) {
+		if (test_number <19 ) {
 
 			rval = render( test->template, test->json, &result );
 

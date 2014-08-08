@@ -15,10 +15,11 @@
 
 #define BUFSZ_DELTA	10240
 #define MAX_TAGSZ	1024
+#define SEC_DELIM		'.'
 
 
 		/*
-		 * Add -DDEUG to CFLAGS in Makefile to turn on debugging output.
+		 * Add -DDEUG to CFLAGS in Makefile to turn on debug output.
 		 */
 #ifdef DEBUG
 #define DEBUG_PRINT 1
@@ -113,6 +114,12 @@ index_json(const char *json, unsigned short **indexp)
 	rval = size_index(json, indexp, &isz);
 
 	if (!rval) {
+/*
+
+		debug_printf("parsing %s\n", json);
+		debug_printf("with length %lu\n", strlen(json));
+		debug_printf("and isze  %lu\n", isz);
+*/
 
 		rval = js0n((const unsigned char *) json, strlen(json), *indexp, isz);
 
@@ -125,26 +132,131 @@ index_json(const char *json, unsigned short **indexp)
 
 }
 
-// In-place modification of JSON string.
-// Find key, and stick a null at the end of it's value.
-// Update *val to point to the start of the value.
-// If key not found, *val is set to NULL.
 int
-get(char *json, unsigned short *index, const char *key, char **val)
+valcpy(const char *json, const char *key, char**val)
 {
-	int		idx = 0;
-	int		rval = 0;
+	int rval = 0;
+	int idx = 0;
+	unsigned short	*index = 0;
 	unsigned short	offset = 0;
 	unsigned short	length = 0;
 
-	idx = j0g_val(key, json, index);
-
 	*val = 0;
-	if (idx > 0) {
+
+	rval = index_json(json, &index);
+
+	if (!rval) {
+
+		idx = j0g_val(key, (char *) json, index);
+
+		/*
+		 * If the key was not found in the indexed JSON,
+		 * then the index will be zero.
+		 * If the key was found, idx will never be zero,
+		 * as idx is the index of the values offset
+		 * that is associated with the key.
+		 */
+		if (idx == 0)
+			return 0;
+
 		offset = index[idx];
 		length = index[idx + 1];
-		json[offset + length] = 0;
-		*val = json + offset;
+		*val = calloc(length + 1, 1);
+		if (!*val)
+			rval = ENOMEM;
+	}
+
+	if (!rval)
+		strncpy(*val, json + offset, length);
+
+	return rval;
+
+}
+
+int
+split_key(const char *key, char **parent, char **child)
+{
+	*parent = 0;
+	*child = 0;
+
+	if (!key || !strlen(key))
+		return 0;
+
+	*parent = calloc(strlen(key), 1);
+	if (!*parent)
+		return ENOMEM;
+
+	 strcpy(*parent, key);
+
+	*child = strchr(*parent, SEC_DELIM);
+
+		/*
+		 * We should only get to this method
+		 * if the key contains a section separator.
+		 */
+
+	if (! *child) {
+		free(*parent);
+		*parent = 0;
+		return  EX_LOGIC_ERROR;
+	}
+
+	**child = 0;
+	(*child)++;
+
+	debug_printf("split_key: '%s' --> ('%s', '%s')\n", key, *parent, *child);
+
+	if (!strlen(*parent)) {
+		free(*parent);
+		*parent = 0;
+		return EX_LOGIC_ERROR;
+	}
+
+	debug_printf("split_key: '%s' --> ('%s', '%s')\n", key, *parent, *child);
+
+	return 0;
+
+}
+
+// Lookup a key's value and copy it to *val.
+// Recurses down a hierarchy
+// (periods in the key mean go down a level).
+// For example, a key of 'a.b' and JSON of  {'a': {'b': 1}}
+// loads "1" into *val.
+// If key not found, *val is set to NULL.
+int
+get(const char *json, const char *key, char **val)
+{
+	char		*p = 0;
+	char		*parent_key = 0;
+	char		*child_key = 0;
+	char		*parent_json = 0;
+	int		rval = 0;
+
+	debug_printf("get('%s', '%s', '%s')\n", json, key, *val);
+
+	if ( (p = strchr(key, SEC_DELIM) ) == 0) {
+
+		rval = valcpy(json, key, val);
+
+	}
+	else {
+	
+		/*
+		 * Recurse.
+		 */
+
+		rval = split_key(key, &parent_key, &child_key);
+
+		if (!rval)
+
+			rval = valcpy(json, parent_key, &parent_json);
+
+		if (!rval)
+
+			rval = get(parent_json, child_key, val);
+
+		free(parent_key);
 	}
 
 	debug_printf("\"%s\" returns \"%s\"\n", key, *val);
@@ -156,23 +268,50 @@ get(char *json, unsigned short *index, const char *key, char **val)
 
 // Look up value in JSON for the given key, and insert it into the result.
 int
-insert_value(char *key, char **qhtml, char *json, unsigned short *index, int raw)
+insert_value(const char *section,  char *tag, char **qhtml, char *json, int raw)
 {
 	int 		rval = 0;
+	char		*key = 0;
 	char		*val = 0;
 	char		*escaped = 0;
+	size_t	keysz = 0;
 
+	debug_printf("insert_value('%s', '%s', '%s', '%s', %d)\n", section, tag, *qhtml, json, raw);
+
+	keysz = strlen(section) + 1 + strlen(tag);
+	if (keysz >= MAX_TAGSZ)
+		rval = EX_TAG_TOO_LONG;
+
+	if (!rval) {
 		/*
 		 * A tag that starts with an ampersand
 		 * is the same as a triple brace.
 		 */
-
-	if (key[0] == '&') {
-		raw = 1;
-		key = key + 1;
+	
+		if (tag[0] == '&') {
+			raw = 1;
+			tag = tag + 1;
+		}
 	}
+debug_printf("%s\n", "MKB1");
 
-	rval = get(json, index, key, &val);
+	if (!rval) {
+
+		key = calloc(keysz, 1);
+	
+		if (strlen(section)) {
+			strcpy(key, section);
+			strcat(key, ".");
+		}
+		strcat(key, tag);
+	}
+debug_printf("%s\n", "MKB2");
+
+
+	if (!rval)
+		rval = get(json, key, &val);
+debug_printf("%s\n", "MKB3");
+
 
 	if (!rval) {
 		if (raw)
@@ -181,13 +320,19 @@ insert_value(char *key, char **qhtml, char *json, unsigned short *index, int raw
 			rval = htmlescape(val, &escaped);
 	}
 
+debug_printf("%s\n", "MKB4");
+
 	if (!rval && escaped) {
 		strcpy(*qhtml, escaped);
 		*qhtml += strlen(*qhtml);
 	}
 
+debug_printf("%s\n", "MKB5");
+
 	if (!raw)
 		free(escaped);
+
+debug_printf("%s\n", "MKB6");
 
 	return rval;
 }
@@ -212,6 +357,7 @@ badchar(char c)
 int
 add_to_tag(char **qtag, char *tag, char c)
 {
+	debug_printf("add_to_tag('%s', '%s', %c)\n", *qtag, tag, c);
 	if (*qtag - tag >= MAX_TAGSZ - 1)
 		return EX_TAG_TOO_LONG;
 	*(*qtag)++ = c;
@@ -269,7 +415,7 @@ pop_section(char *tag, char *section)
 	}
 
 	if (!rval) {
-		p = strrchr(section, '.');
+		p = strrchr(section, SEC_DELIM);
 		if (p) {
 			popped = p + 1;
 			p++;
@@ -304,13 +450,12 @@ render(const char *template, char *json, char **html)
 	char		prevprev;
 	char		*qhtml = 0;
 	char		*qtag = 0;
-	unsigned short	*index = 0;
 	int		rval = 0;
 
 	debug_printf("%s\n", "Starting to render");
 
 		/*
-		 * The states.
+		 * The states and their transitions.
 		 */
 
 
@@ -342,7 +487,7 @@ render(const char *template, char *json, char **html)
 	static void *gopush[] =
 	{
 		[0 ... 45 ]	= &&l_push,
-		[ '.' ]		= &&l_bad_section,	// 46
+		[ SEC_DELIM ]		= &&l_bad_section,	// 46
 		[47 ... 124 ]	= &&l_push,
 		[ '}' ]		= &&l_xpushp,	// 125
 		[126 ... 255]	= &&l_push
@@ -358,7 +503,7 @@ render(const char *template, char *json, char **html)
 	static void *gopop[] =
 	{
 		[0 ... 45 ]	= &&l_pop,
-		[ '.' ]		= &&l_bad_section,	// 46
+		[ SEC_DELIM ]		= &&l_bad_section,	// 46
 		[47 ... 124 ]	= &&l_pop,
 		[ '}' ]		= &&l_xpopp,	// 125
 		[126 ... 255]	= &&l_pop
@@ -407,12 +552,6 @@ render(const char *template, char *json, char **html)
 	};
 
 		/*
-		 * Index the JSON.
-		 */
-
-	rval = index_json(json, &index);
-
-		/*
 		 * Allocate memory to hold HTML.
 		 */
 
@@ -449,16 +588,14 @@ render(const char *template, char *json, char **html)
 		prevprev = prev;
 	}
 
-	free(index);
-
 	return rval;
 
 		/*
-		 * The state transitions.
+		 * The behavior on transition.
 		 */
 
 	l_bad_section:
-		rval = EX_SECTION_NAME_HAS_DOT;
+		rval = EX_INVALID_SECTION_NAME;
 		goto l_loop;
 
 	l_html:
@@ -577,7 +714,7 @@ render(const char *template, char *json, char **html)
 		go = gohtml;
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xtag");
 		debug_printf("before insert, html = \"%s\"\n", *html);
-		rval = insert_value(tag, &qhtml, json, index, 0);
+		rval = insert_value(section, tag, &qhtml, json, 0);
 		debug_printf("after insert, html = \"%s\"\n", *html);
 		memset(tag, 0, MAX_TAGSZ);
 		goto l_loop;
@@ -614,7 +751,7 @@ render(const char *template, char *json, char **html)
 		go = gohtml;
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xraw");
 		debug_printf("before insert raw, html = \"%s\"\n", *html);
-		rval = insert_value(tag, &qhtml, json, index, 1);
+		rval = insert_value(section, tag, &qhtml, json, 1);
 		debug_printf("after insert raw, html = \"%s\"\n", *html);
 		memset(tag, 0, MAX_TAGSZ);
 		goto l_loop;
