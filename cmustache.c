@@ -116,12 +116,6 @@ index_json(const char *json, unsigned short **indexp)
 	rval = size_index(json, indexp, &isz);
 
 	if (!rval) {
-/*
-
-		debug_printf("parsing %s\n", json);
-		debug_printf("with length %lu\n", strlen(json));
-		debug_printf("and isze  %lu\n", isz);
-*/
 
 		rval = js0n((const unsigned char *) json, strlen(json), *indexp, isz);
 
@@ -326,7 +320,6 @@ insert_value(const char *section,  char *tag, char **qhtml, char *json, int raw)
 			tag = tag + 1;
 		}
 	}
-debug_printf("%s\n", "MKB1");
 
 	if (!rval) {
 
@@ -338,12 +331,10 @@ debug_printf("%s\n", "MKB1");
 		}
 		strcat(key, tag);
 	}
-debug_printf("%s\n", "MKB2");
 
 
 	if (!rval)
 		rval = get(json, key, &val);
-debug_printf("%s\n", "MKB3");
 
 
 	if (!rval) {
@@ -353,19 +344,13 @@ debug_printf("%s\n", "MKB3");
 			rval = htmlescape(val, &escaped);
 	}
 
-debug_printf("%s\n", "MKB4");
-
 	if (!rval && escaped) {
 		strcpy(*qhtml, escaped);
 		*qhtml += strlen(*qhtml);
 	}
 
-debug_printf("%s\n", "MKB5");
-
 	if (!raw)
 		free(escaped);
-
-debug_printf("%s\n", "MKB6");
 
 	return rval;
 }
@@ -472,6 +457,35 @@ pop_section(char *tag, char *section)
 	return rval;
 }
 
+int
+is_section_falsey(const char *json, const char *section, int *drop)
+{
+	int rval = 0;
+	char *val = 0;
+
+	if (!section || !strlen(section))
+
+		*drop = 0;
+
+	else {	
+	
+		rval = get(json, section, &val);
+		if (!rval) {
+			if (!val)
+				*drop = 1;
+			else if (!strcmp(val, "false"))
+				*drop = 1;
+			else
+				*drop = 0;
+		}
+		
+	}
+
+	debug_printf("is_section_falsey('%s', '%s') --> %d\n", json, section, *drop);
+
+	return rval;
+}
+
 
 // Given a mustache template and some JSON, render the HTML.
 int
@@ -484,6 +498,7 @@ render(const char *template, char *json, char **html)
 	char		prevprev;
 	char		*qhtml = 0;
 	char		*qtag = 0;
+	int		drop = 0;
 	int		rval = 0;
 
 	debug_printf("%s\n", "Starting to render");
@@ -633,7 +648,8 @@ render(const char *template, char *json, char **html)
 		goto l_loop;
 
 	l_html:
-		*qhtml++ = *cur;
+		if (!drop)
+			*qhtml++ = *cur;
 		goto l_loop;
 
 	l_tagp:
@@ -708,6 +724,8 @@ render(const char *template, char *json, char **html)
 		go = gohtml;
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xpush");
 		rval = push_section(tag, section);
+		if (!rval)
+			rval = is_section_falsey(json, section, &drop);
 		memset(tag, 0, MAX_TAGSZ);
 		goto l_loop;
 
@@ -728,6 +746,8 @@ render(const char *template, char *json, char **html)
 		go = gohtml;
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xpop");
 		rval = pop_section(tag, section);
+		if (!rval)
+			rval = is_section_falsey(json, section, &drop);
 		memset(tag, 0, MAX_TAGSZ);
 		goto l_loop;
 
@@ -748,7 +768,8 @@ render(const char *template, char *json, char **html)
 		go = gohtml;
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xtag");
 		debug_printf("before insert, html = \"%s\"\n", *html);
-		rval = insert_value(section, tag, &qhtml, json, 0);
+		if (!drop)
+			rval = insert_value(section, tag, &qhtml, json, 0);
 		debug_printf("after insert, html = \"%s\"\n", *html);
 		memset(tag, 0, MAX_TAGSZ);
 		goto l_loop;
@@ -785,7 +806,8 @@ render(const char *template, char *json, char **html)
 		go = gohtml;
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xraw");
 		debug_printf("before insert raw, html = \"%s\"\n", *html);
-		rval = insert_value(section, tag, &qhtml, json, 1);
+		if (!drop)
+			rval = insert_value(section, tag, &qhtml, json, 1);
 		debug_printf("after insert raw, html = \"%s\"\n", *html);
 		memset(tag, 0, MAX_TAGSZ);
 		goto l_loop;
