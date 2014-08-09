@@ -13,7 +13,7 @@ CC=gcc
 
 CFLAGS=-Wall -I../deps/js0n -I../deps/chtmlescape -I./deps/tap.c -I./deps/vec #-DDEBUG
 
-all: json interpolation sections
+all: sections #json interpolation 
 
 json: json_test
 	./json_test
