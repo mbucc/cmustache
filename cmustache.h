@@ -16,4 +16,7 @@ int	get(const char *json, const char *key, char **val);
 
 int	split_key(const char *key, char **parent, char **child);
 
+int	valcpy(const char *json, const char *key, char**val);
+
+
 

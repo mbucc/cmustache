@@ -1,5 +1,7 @@
-#include <err.h>
 #include <sys/errno.h>
+
+#include <ctype.h>
+#include <err.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -161,6 +163,20 @@ valcpy(const char *json, const char *key, char**val)
 
 		offset = index[idx];
 		length = index[idx + 1];
+
+		/*
+		 * Trim whitespace off ends of value.
+		 */
+
+		while (isspace(*(json + offset)) && length > 0) {
+			offset++;
+			length--;
+		}
+
+		while (isspace(*(json + offset + length - 1)) && length > 0) {
+			length--;
+		}
+
 		*val = calloc(length + 1, 1);
 		if (!*val)
 			rval = ENOMEM;
@@ -377,7 +393,8 @@ add_to_tag(char **qtag, char *tag, char c)
 	debug_printf("add_to_tag('%s', '%s', %c)\n", *qtag, tag, c);
 	if (*qtag - tag >= MAX_TAGSZ - 1)
 		return EX_TAG_TOO_LONG;
-	*(*qtag)++ = c;
+	if (!isspace(c))
+		*(*qtag)++ = c;
 	return 0;
 }
 
