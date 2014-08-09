@@ -29,7 +29,7 @@ deps/chtmlescape:
 GITHUB=https://raw.githubusercontent.com
 SPEC=${GITHUB}/mustache/spec/master
 
-spec: specs/interpolation.json
+spec: specs/interpolation.json specs/sections.json
 
 specs/%.json:
 	curl ${SPEC}/$@ > t

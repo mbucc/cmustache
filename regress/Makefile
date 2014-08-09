@@ -13,7 +13,7 @@ CC=gcc
 
 CFLAGS=-Wall -I../deps/js0n -I../deps/chtmlescape -I./deps/tap.c -I./deps/vec #-DDEBUG
 
-all: json interpolation
+all: json interpolation sections
 
 json: json_test
 	./json_test
@@ -24,6 +24,9 @@ json_test: json_test.c ../cmustache.c ../cmustache.h ${T}/tap.c ${T}/tap.h ${J}/
 
 interpolation: spec_test
 	./spec_test '../specs/interpolation.json'
+
+sections: spec_test
+	./spec_test '../specs/sections.json'
 
 spec_test: dep spec_test.c spec_test.h ../cmustache.h ../cmustache.c ${T}/tap.c ${T}/tap.h ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ${E}/htmlescape.c
 	$(CC) $(CFLAGS) -o spec_test spec_test.c ../cmustache.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ${E}/htmlescape.c
