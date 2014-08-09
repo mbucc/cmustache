@@ -15,18 +15,18 @@ CFLAGS=-Wall -I../deps/js0n -I../deps/chtmlescape -I./deps/tap.c -I./deps/vec #-
 
 all: json interpolation
 
-json: test_json
-	./test_json
+json: json_test
+	./json_test
 
-test_json: test_json.c ../cmustache.c ../cmustache.h ${T}/tap.c ${T}/tap.h ${J}/js0n.c ${J}/j0g.c 
-	$(CC) $(CFLAGS) -o test_json test_json.c ../cmustache.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c ${E}/htmlescape.c
+json_test: json_test.c ../cmustache.c ../cmustache.h ${T}/tap.c ${T}/tap.h ${J}/js0n.c ${J}/j0g.c 
+	$(CC) $(CFLAGS) -o json_test json_test.c ../cmustache.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c ${E}/htmlescape.c
 
 
-interpolation: test
-	./test '../specs/interpolation.json'
+interpolation: spec_test
+	./spec_test '../specs/interpolation.json'
 
-test: dep test.c test.h ../cmustache.h ../cmustache.c ${T}/tap.c ${T}/tap.h ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ${E}/htmlescape.c
-	$(CC) $(CFLAGS) -o test test.c ../cmustache.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ${E}/htmlescape.c
+spec_test: dep spec_test.c spec_test.h ../cmustache.h ../cmustache.c ${T}/tap.c ${T}/tap.h ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ${E}/htmlescape.c
+	$(CC) $(CFLAGS) -o spec_test spec_test.c ../cmustache.c ${T}/tap.c ${J}/js0n.c ${J}/j0g.c ${V}/vec.c ${E}/htmlescape.c
 
 dep: ${V} ${T}
 
@@ -37,4 +37,4 @@ ${T}:
 	clib install thlorenz/tap.c   
 
 clean:
-	rm -f test test_json
+	rm -f spec_test json_test

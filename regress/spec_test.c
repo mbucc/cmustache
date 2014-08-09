@@ -17,7 +17,7 @@
 
 #include "../cmustache.h"
 
-#include "test.h"
+#include "spec_test.h"
 
 
 long
