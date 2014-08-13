@@ -18,32 +18,6 @@
 
 #include "../cmustache.h"
 
-void
-get_nosection()
-{
-	char		*val = 0;
-	int		rval = 0;
-
-	rval = get("{\"a\": 1}", 0, "a", &val);
-
-	ok(!rval, "Calling get with no section returned %d", rval);
-	is(val, "1");
-	free(val);
-}
-
-void
-get_section()
-{
-	char		*val = 0;
-	char		*json = "{\"a\": {\"b\": 2}}";
-	int		rval = 0;
-
-	rval = get(json, "a", "b", &val);
-	ok(!rval, "rval is %d", rval);
-	is(val, "2");
-	free(val);
-
-}
 
 void
 valcpy_trim()
@@ -88,12 +62,11 @@ resolve_section()
 	char		*json = "{\"a\": {\"one\": 1}, \"b\": {\"two\": 2}}";
 	int		rval = 0;
 
-	rval = get(json, "a", "one", &val);
+	rval = get(json, strlen(json), "a", "one", &val);
 	ok(!rval, "rval is %d", rval);
 	is(val, "1");
 
 	free(val);
-
 }
 
 
@@ -104,7 +77,7 @@ resolve_nested_section()
 	char		*json = "{\"a\": {\"one\": 1}, \"b\": {\"two\": 2}}";
 	int		rval = 0;
 
-	rval = get(json, "a.b", "two", &val);
+	rval = get(json, strlen(json), "a.b", "two", &val);
 	ok(!rval, "rval is %d", rval);
 	is(val, "2");
 
@@ -222,7 +195,7 @@ jsonpath_key_with_dot()
 int
 main (int argc, char *argv[])
 {
-	plan(22);
+	plan(26);
 
 	jsonpath_nodot();		// 3
 
@@ -239,6 +212,10 @@ main (int argc, char *argv[])
 	jsonpath_null_key();		// 3
 
 	jsonpath_key_with_dot();	// 3
+
+	resolve_section();		// 2
+
+	resolve_nested_section();	// 2
 
 /*
 	skip(1, 6);

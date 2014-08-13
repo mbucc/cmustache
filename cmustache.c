@@ -137,7 +137,6 @@ jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offs
 {
 	char		*keybuf = 0;
 	char		*p = 0;
-	const char	*q = 0;
 	unsigned short	*index = 0;
 	unsigned short	suboffset = 0;
 	unsigned short	sublength = 0;
@@ -363,13 +362,20 @@ popup(char *section)
 // Lookup a key's value and copy it to *val.
 // If the key is not found, *val is set to NULL.
 int
-get(const char *json, const char *section, const char *key, char **val)
+get(const char *json, size_t jsonlen, const char *section, const char *key, char **val)
 {
-	char		*keybuf = 0;
-	char		*sectionbuf = 0;
+	char		*secbuf = 0;
+	char		*p = 0;
 	int		rval = 0;
+	int		loop_limit = 1000;
+	int		loop_i = 0;
+	unsigned short	offset = 0;
+	unsigned short	length = 0;
 
 	debug_printf("get('%s', '%s', '%s', '%s')\n", json, section, key, *val);
+
+	if (!val)
+		return EX_LOGIC_ERROR;
 
 	*val = 0;
 
@@ -381,76 +387,60 @@ get(const char *json, const char *section, const char *key, char **val)
 	if (!json || !strlen(json))
 		return 0;
 
-	if (section) {
-		sectionbuf = calloc(strlen(section), 1);
-		if (!sectionbuf)
-			rval = ENOMEM;
-	
+	secbuf = calloc(strlen(section), 1);
+	if (!secbuf)
+		rval = ENOMEM;
+	if (!rval)
+		strcpy(secbuf, section);
+
+	while (!rval && !*val && strlen(secbuf) && loop_i < loop_limit) {
+
+		loop_i++;
+
+		rval = jsonpath(json, jsonlen, secbuf, &offset, &length);
+
+		/*
+		 * The JSON has this section, see if the section has the key.
+		 */
+
 		if (!rval) {
-			strcpy(sectionbuf, section);
-			keybuf = calloc(strlen(section) + strlen(key) + 1, 1);
-			if (!keybuf)
-				rval = ENOMEM;
+			if (offset) {
+				json += offset;
+				rval = jsonpath(json, length, key, &offset, &length);
+			}
+
+			if (!rval) {
+				if  (offset) {
+		/*
+		 * Victory, we found the key in this section.
+		 */
+					*val = calloc(length + 1, 1);
+					if (*val)
+						strncat(*val, json + offset, length);
+					else
+						rval = ENOMEM;
+				}
+
+		/*
+		 * The section didn't have key, 
+		 * loop and look for key in the parent section.
+		 */
+
+				else {
+					p = strrchr(secbuf, DOT);
+					if (p)
+						*p = '\0';
+					else
+						secbuf = '\0';
+				}
+			}
 		}
 	}
+	
+	if (loop_i >= loop_limit)
+		rval = EX_LOGIC_ERROR;
 
-if (sectionbuf)
-printf("MKB1\n");
-else
-printf("MKB2\n");
-
-if (*sectionbuf)
-printf("MKB3\n");
-else
-printf("MKB4\n");
-
-
-
-	while (!rval && !*val && sectionbuf && *sectionbuf) {
-
-printf("mkb5\n");
-
-		strcpy(keybuf, sectionbuf);
-		strcat(keybuf, ".");
-		strcat(keybuf, key);
-		rval = valcpy(json, keybuf, val);
-printf("rval = %d\n", rval);
-printf("*val = '%s'\n", *val);
-
-
-		/*
-		 * When in a section hierarchy,
-		 * we resolve keys differently.
-		 * Whereas a dotted notation key will stop on the first miss,
-		 * in a section context look for the key in the next layer up,
-		 * until we find it or we run out of sections.
-		 */
-		
-		if (!rval && ! *val)
-			rval = popup(sectionbuf);
-
-if (sectionbuf)
-printf("MKB1\n");
-else
-printf("MKB2\n");
-
-if (*sectionbuf)
-printf("MKB3\n");
-else
-printf("MKB4\n");
-	}
-
-		/*
-		 * If not found look for the key in the top-level JSON keys.
-		 */
-
-printf("rval = %d\n", rval);
-printf("*val = '%s'\n", *val);
-	if (!rval && !*val)
-		rval = valcpy(json, key, val);
-
-	free(sectionbuf);
-	free(keybuf);
+	free(secbuf);
 
 	debug_printf("\"%s\" returns \"%s\"\n", key, *val);
 
@@ -483,7 +473,7 @@ insert_value(const char *section, char *tag, char **qhtml, char *json, int raw)
 	}
 
 	if (!rval)
-		rval = get(json, section, key, &val);
+		rval = get(json, strlen(json), section, key, &val);
 
 
 	if (!rval) {
@@ -621,7 +611,7 @@ is_section_falsey(const char *json, const char *section, int *drop)
 
 	else {	
 	
-		rval = get(json, 0, section, &val);
+		rval = get(json, strlen(json), 0, section, &val);
 		if (!rval) {
 			if (!val)
 				*drop = 1;

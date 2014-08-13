@@ -12,7 +12,7 @@ int	index_json(const char *json, size_t jsonlen, unsigned short **indexp);
 
 int	size_index(const char *json, size_t jsonlen, unsigned short **indexp, unsigned int *iszp);
 
-int	get(const char *json, const char *section, const char *key, char **val);
+int	get(const char *json, size_t jsonlen, const char *section, const char *key, char **val);
 
 int	split_key(const char *key, char **parent, char **child);
 
