@@ -35,8 +35,9 @@ specs/%.json:
 	curl ${SPEC}/$@ > t
 	mv t $@
 
-showspec: specs/interpolation.json
-	cat specs/interpolation.json | python -mjson.tool
+CURRENT=specs/sections.json
+showspec: ${CURRENT}
+	cat ${CURRENT} | python -mjson.tool
 
 #---------------------------------------------------
 #

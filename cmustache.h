@@ -8,15 +8,17 @@
 
 int	render(const char* template, char *json, char **resultp);
 
-int	index_json(const char *json, unsigned short **indexp);
+int	index_json(const char *json, size_t jsonlen, unsigned short **indexp);
 
-int	size_index(const char *json, unsigned short **indexp, unsigned int *iszp);
+int	size_index(const char *json, size_t jsonlen, unsigned short **indexp, unsigned int *iszp);
 
-int	get(const char *json, const char *key, char **val);
+int	get(const char *json, const char *section, const char *key, char **val);
 
 int	split_key(const char *key, char **parent, char **child);
 
 int	valcpy(const char *json, const char *key, char**val);
+
+int	jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offset, unsigned short *length);
 
 
 
