@@ -120,6 +120,13 @@ index_json(const char *json, size_t jsonlen, unsigned short **indexp)
 
 }
 
+int
+is_obj(const char *json, size_t jsonlen) 
+{
+	const char	*p;
+	for (p = json; isspace(*p) && p - json < jsonlen; p++);
+	return *p == '{';
+}
 
 // Given a (perhaps dotted) key, return the offset and length
 // of the value of this key.
@@ -130,21 +137,34 @@ jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offs
 {
 	char		*keybuf = 0;
 	char		*p = 0;
+	const char	*q = 0;
 	unsigned short	*index = 0;
 	unsigned short	suboffset = 0;
 	unsigned short	sublength = 0;
 	int		rval = 0;
-	int	idx = 0;
+	int		idx = 0;
+
+	if (!offset || !length)
+		return EX_LOGIC_ERROR;
 
 	*offset = 0;
 	*length = 0;
 
-	debug_printf("jsonpath('%s', '%s')\n", json, key);
+	debug_printf("jsonpath('%s', %lu, '%s')\n", json, jsonlen, key);
 
 	if (!json || !strlen(json))
 		return rval;
 
 	if (!key || !strlen(key))
+		return rval;
+
+		/*
+		 * Only JSON objects have keys.
+		 * If we are not in an object, 
+		 * we ran out of levels to parse down into
+		 * and the key is not found.
+		 */
+	if ( ! is_obj(json, jsonlen) )
 		return rval;
 
 	rval = index_json(json, jsonlen, &index);
@@ -162,9 +182,6 @@ jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offs
 		}
 	}
 
-	free(index);
-	index = 0;
-
 		/*
 		 * If key not found, look for it one level down.
 		 */
@@ -176,11 +193,11 @@ jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offs
 	}
 
 	if (!rval && *offset == 0) {
+		strcpy(keybuf, key);
 		p = strchr(keybuf, DOT);
 		if (p) {
 			*p++ = '\0';
 			idx = j0g_val(keybuf, (char *) json, index);
-			
 			if (idx != 0) {
 				suboffset = index[idx];
 				sublength = index[idx + 1];
@@ -202,9 +219,10 @@ jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offs
 			;
 	}
 
-	if (!rval && *offset == 0)
-		
 
+	free(index);
+	free(keybuf);
+		
 	return rval;
 
 }

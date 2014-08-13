@@ -136,20 +136,109 @@ jsonpath_drilldown1()
 
 	rval = jsonpath(json, strlen(json), "a.one", &offset, &length);
 	ok(!rval, "rval is %d", rval);
+	cmp_ok(offset, "==", 14);
+	cmp_ok(length, "==", 1);
+}
+
+void
+jsonpath_drilldown2()
+{
+	char		*json = "{\"a\": {\"one\": {\"two\": \"abcdefg\" }, \"b\": {\"two\": 2} } }";
+	int		rval = 0;
+	unsigned short offset;
+	unsigned short length;
+
+	rval = jsonpath(json, strlen(json), "a.one.two", &offset, &length);
+	ok(!rval, "rval is %d", rval);
+	cmp_ok(offset, "==", 23);
+	cmp_ok(length, "==", 7);
+}
+
+void
+jsonpath_fail_lookup()
+{
+	char		*json = "{\"a\": {\"one\": {\"two\": \"abcdefg\" }, \"b\": {\"two\": 2} } }";
+	int		rval = 0;
+	unsigned short offset;
+	unsigned short length;
+
+	rval = jsonpath(json, strlen(json), "a.one.two.three", &offset, &length);
+	ok(!rval, "rval is %d", rval);
+	cmp_ok(offset, "==", 0);
+	cmp_ok(length, "==", 0);
+}
+
+void
+jsonpath_all_nulls()
+{
+	int rval = 0;
+
+	rval = jsonpath(0, 0, 0, 0, 0);
+	ok(rval == EX_LOGIC_ERROR, "rval is %d", rval);
+}
+
+void
+jsonpath_null_json()
+{
+	int		rval = 0;
+	unsigned short offset;
+	unsigned short length;
+
+	rval = jsonpath(0, 10, "a.one.two.three", &offset, &length);
+	ok(!rval, "rval is %d", rval);
+	cmp_ok(offset, "==", 0);
+	cmp_ok(length, "==", 0);
+}
+
+void
+jsonpath_null_key()
+{
+	char		*json = "{\"a\": {\"one\": {\"two\": \"abcdefg\" }, \"b\": {\"two\": 2} } }";
+	int		rval = 0;
+	unsigned short offset;
+	unsigned short length;
+
+	rval = jsonpath(json, strlen(json), 0, &offset, &length);
+	ok(!rval, "rval is %d", rval);
+	cmp_ok(offset, "==", 0);
+	cmp_ok(length, "==", 0);
+}
+
+void
+jsonpath_key_with_dot()
+{
+	char		*json = "{\"a\": {\"one.two\": 1}, \"b\": {\"two\": 2}}";
+	int		rval = 0;
+	unsigned short offset;
+	unsigned short length;
+
+	rval = jsonpath(json, strlen(json), "a.one.two", &offset, &length);
+	ok(!rval, "rval is %d", rval);
 	cmp_ok(offset, "==", 18);
 	cmp_ok(length, "==", 1);
 }
 
 
-
 int
 main (int argc, char *argv[])
 {
-	plan(6);
+	plan(22);
 
-	jsonpath_nodot();
+	jsonpath_nodot();		// 3
 
-	jsonpath_drilldown1();
+	jsonpath_drilldown1();	// 3
+
+	jsonpath_drilldown2();	// 3
+
+	jsonpath_fail_lookup();	// 3
+
+	jsonpath_all_nulls();		// 1
+
+	jsonpath_null_json();	// 3
+
+	jsonpath_null_key();		// 3
+
+	jsonpath_key_with_dot();	// 3
 
 /*
 	skip(1, 6);
