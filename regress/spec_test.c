@@ -110,10 +110,10 @@ get_test(char *tests, unsigned short *index)
 	 *
 	 */
 
-	get(testjson, "data", &rval->json);
-	get(testjson, "template", &rval->template);
-	get(testjson, "expected", &rval->expected);
-	get(testjson, "desc", &rval->description);
+	get(testjson, strlen(testjson), 0, "data", &rval->json);
+	get(testjson, strlen(testjson), 0, "template", &rval->template);
+	get(testjson, strlen(testjson), 0, "expected", &rval->expected);
+	get(testjson, strlen(testjson), 0, "desc", &rval->description);
 
 	return rval;
 
@@ -122,24 +122,32 @@ get_test(char *tests, unsigned short *index)
 test_vec_t
 parse_tests(char *json)
 {
-	test_vec_t rval;
+	test_vec_t tests_vec;
 	unsigned short	*index = 0;
 	char *tests = 0;
+	int rval = 0;
 
-	get(json, "tests", &tests);
+	vec_init(&tests_vec);
 
-	index_json(tests, &index);
+	rval = get(json, strlen(json), 0, "tests", &tests);
 
-	vec_init(&rval);
+	if (rval)
+		errx(rval, "get returned an error");
+
+	if (!tests)
+		return tests_vec;
+
+	index_json(tests, strlen(tests), &index);
+
 
 	for (unsigned short *i = index; *i; i += 2) {
 
-		vec_push(&rval, get_test(tests, i));
+		vec_push(&tests_vec, get_test(tests, i));
 	}
 
 	free(index);
 
-	return rval;
+	return tests_vec;
 
 }
 

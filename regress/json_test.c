@@ -18,19 +18,32 @@
 
 #include "../cmustache.h"
 
+void
+test_trim()
+{
+	char	*s = "     a     ";
+	unsigned short	offset = 0;
+	unsigned short length = strlen(s);
+
+	trim(s, &offset, &length);
+
+	cmp_ok(offset, "==", 5);
+	cmp_ok(length, "==", 1);
+}
+
 
 void
-valcpy_trim()
+jsonpath_trim()
 {
-	char		*val = 0;
 	char		*json = "{\"a\": \"   b   \"}";
 	int		rval = 0;
+	unsigned short offset;
+	unsigned short length;
 
-	rval = valcpy(json, "a", &val);
+	rval = jsonpath(json, strlen(json), "a", &offset, &length);
 	ok(!rval, "rval is %d", rval);
-	is(val, "b");
-	free(val);
-
+	cmp_ok(offset, "==", 10);
+	cmp_ok(length, "==", 1);
 }
 
 
@@ -50,8 +63,13 @@ valcpy_trim()
 //	But the behavior diverges if the key is not found there.
 //
 //	The dotted notation returns empty string.
-//	The section context pops up through the levels one-by-one,
-//	stopping either when it finds the key or runs out of levels.
+//
+//	The section context pops off the outer-most section
+//	("a" in this example)
+//	and then tries again in the shortened context.
+//	This repeats until you run out of contexts to pop off
+//	or you find the key,
+//	whichever comes first.
 //
 
 
@@ -195,8 +213,6 @@ jsonpath_key_with_dot()
 int
 main (int argc, char *argv[])
 {
-	plan(26);
-
 	jsonpath_nodot();		// 3
 
 	jsonpath_drilldown1();	// 3
@@ -213,23 +229,15 @@ main (int argc, char *argv[])
 
 	jsonpath_key_with_dot();	// 3
 
+	jsonpath_trim();		// 2
+
+	test_trim();			// 2
+
+
 	resolve_section();		// 2
 
 	resolve_nested_section();	// 2
-
-/*
-	skip(1, 6);
-
-	get_nosection();	// 2
-	get_section();		// 2
-	valcpy_trim();		// 2
-
-	end_skip;
-
-	resolve_section();		// 2
-	// resolve_nested_section();	// 2
-*/
 	
-
 	done_testing();
+
 }

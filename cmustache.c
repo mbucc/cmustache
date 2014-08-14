@@ -105,6 +105,9 @@ index_json(const char *json, size_t jsonlen, unsigned short **indexp)
 	int		rval = 0;
 	unsigned int	isz;
 
+	if (!json || !strlen(json) || !indexp)
+		return rval;
+
 	rval = size_index(json, jsonlen, indexp, &isz);
 
 	if (!rval) {
@@ -126,6 +129,27 @@ is_obj(const char *json, size_t jsonlen)
 	const char	*p;
 	for (p = json; isspace(*p) && p - json < jsonlen; p++);
 	return *p == '{';
+}
+
+
+
+
+// Trim whitespace off ends of value.
+void
+trim(const char *json, unsigned short *offset, unsigned short *length)
+{
+	if (!offset || !length || !json)
+		return;
+
+	while (isspace(*(json + *offset)) && *length > 0) {
+		(*offset)++;
+		(*length)--;
+	}
+
+	while (isspace(*(json + *offset + *length - 1)) && *length > 0) {
+		(*length)--;
+	}
+
 }
 
 // Given a (perhaps dotted) key, return the offset and length
@@ -178,6 +202,7 @@ jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offs
 		if (idx != 0) {
 			*offset = index[idx];
 			*length = index[idx + 1];
+			trim(json, offset, length);
 		}
 	}
 
@@ -203,8 +228,10 @@ jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offs
 				json += suboffset;
 				rval =  jsonpath(json, sublength, p, offset, length);
 
-				if (!rval && *offset != 0)
+				if (!rval && *offset != 0) {
+					trim(json, offset, length);
 					*offset += suboffset;
+				}
 				else
 					/* EMTPY -- if offset is zero, then key is not found. */
 					;
@@ -295,77 +322,11 @@ valcpy(const char *json, const char *keypath, char**val)
 
 }
 
-int
-split_key(const char *key, char **parent, char **child)
-{
-	*parent = 0;
-	*child = 0;
-
-	if (!key || !strlen(key))
-		return 0;
-
-	*parent = calloc(strlen(key), 1);
-	if (!*parent)
-		return ENOMEM;
-
-	 strcpy(*parent, key);
-
-	*child = strchr(*parent, DOT);
-
-		/*
-		 * We should only get to this method
-		 * if the key contains a section separator.
-		 */
-
-	if (! *child) {
-		free(*parent);
-		*parent = 0;
-		return  EX_LOGIC_ERROR;
-	}
-
-	**child = 0;
-	(*child)++;
-
-	debug_printf("split_key: '%s' --> ('%s', '%s')\n", key, *parent, *child);
-
-	if (!strlen(*parent)) {
-		free(*parent);
-		*parent = 0;
-		return EX_LOGIC_ERROR;
-	}
-
-	debug_printf("split_key: '%s' --> ('%s', '%s')\n", key, *parent, *child);
-
-	return 0;
-
-}
-
-int
-popup(char *section) 
-{
-	int		rval = 0;
-	char		*p = 0;
-
-	if (!section || !*section || !strlen(section))
-		return rval;
-
-	p = strrchr(section, DOT);
-
-	if (p)
-		*p = '\0';
-	else
-		*section = '\0';
-
-	return rval;
-}
-
 // Lookup a key's value and copy it to *val.
 // If the key is not found, *val is set to NULL.
 int
 get(const char *json, size_t jsonlen, const char *section, const char *key, char **val)
 {
-	char		*secbuf = 0;
-	char		*p = 0;
 	int		rval = 0;
 	int		loop_limit = 1000;
 	int		loop_i = 0;
@@ -387,17 +348,13 @@ get(const char *json, size_t jsonlen, const char *section, const char *key, char
 	if (!json || !strlen(json))
 		return 0;
 
-	secbuf = calloc(strlen(section), 1);
-	if (!secbuf)
-		rval = ENOMEM;
-	if (!rval)
-		strcpy(secbuf, section);
+	while (!rval && !*val && section && strlen(section)) {
+	
+		if (loop_i++ >= loop_limit)
+			rval = EX_LOGIC_ERROR;
 
-	while (!rval && !*val && strlen(secbuf) && loop_i < loop_limit) {
-
-		loop_i++;
-
-		rval = jsonpath(json, jsonlen, secbuf, &offset, &length);
+		if (!rval)
+			rval = jsonpath(json, jsonlen, section, &offset, &length);
 
 		/*
 		 * The JSON has this section, see if the section has the key.
@@ -422,27 +379,41 @@ get(const char *json, size_t jsonlen, const char *section, const char *key, char
 				}
 
 		/*
-		 * The section didn't have key, 
-		 * loop and look for key in the parent section.
+		 * The section didn't have key.
+		 * Drop outermost section and try again.
 		 */
 
-				else {
-					p = strrchr(secbuf, DOT);
-					if (p)
-						*p = '\0';
-					else
-						secbuf = '\0';
-				}
+				else
+					section = strrchr(section, DOT);
+					if (section)
+						section++;
 			}
 		}
 	}
+
+		/*
+		 * If not found in section, try global context.
+		 */
+
+	if (!rval) {
+
+		rval = jsonpath(json, jsonlen, key, &offset, &length);
+
+		if (!rval) {
+			if  (offset) {
+				*val = calloc(length + 1, 1);
+				if (*val)
+					strncat(*val, json + offset, length);
+				else
+					rval = ENOMEM;
+			}
+		}
+				
+	}
+
 	
-	if (loop_i >= loop_limit)
-		rval = EX_LOGIC_ERROR;
 
-	free(secbuf);
-
-	debug_printf("\"%s\" returns \"%s\"\n", key, *val);
+	debug_printf("\"%s\" returns \"%s\" (rval = %d)\n", key, *val, rval);
 
 	return rval;
 

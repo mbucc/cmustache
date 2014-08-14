@@ -12,13 +12,13 @@ int	index_json(const char *json, size_t jsonlen, unsigned short **indexp);
 
 int	size_index(const char *json, size_t jsonlen, unsigned short **indexp, unsigned int *iszp);
 
+int	index_json(const char *json, size_t jsonlen, unsigned short **indexp);
+
 int	get(const char *json, size_t jsonlen, const char *section, const char *key, char **val);
 
-int	split_key(const char *key, char **parent, char **child);
-
-int	valcpy(const char *json, const char *key, char**val);
-
 int	jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offset, unsigned short *length);
+
+void	trim(const char *json, unsigned short *offset, unsigned short *length);
 
 
 
