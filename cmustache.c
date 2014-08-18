@@ -170,6 +170,9 @@ jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offs
 	if (!offset || !length)
 		return EX_LOGIC_ERROR;
 
+	if (!key || !strlen(key))
+		return 0;
+
 	*offset = 0;
 	*length = 0;
 
