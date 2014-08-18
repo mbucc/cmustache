@@ -76,11 +76,13 @@ jsonpath_trim()
 void
 resolve_section()
 {
+	char		 section[][MAX_KEYSZ] = { { "a" }, { 0 } };
 	char		*val = 0;
 	char		*json = "{\"a\": {\"one\": 1}, \"b\": {\"two\": 2}}";
 	int		rval = 0;
 
-	rval = get(json, strlen(json), "a", "one", &val);
+	
+	rval = get(json, strlen(json), section, 1, "one", &val);
 	ok(!rval, "rval is %d", rval);
 	is(val, "1");
 
@@ -91,11 +93,12 @@ resolve_section()
 void
 resolve_nested_section()
 {
+	char		section[][MAX_KEYSZ] = { { "a" }, { "b" }, {0} };
 	char		*val = 0;
 	char		*json = "{\"a\": {\"one\": 1}, \"b\": {\"two\": 2}}";
 	int		rval = 0;
 
-	rval = get(json, strlen(json), "a.b", "two", &val);
+	rval = get(json, strlen(json), section, 2, "two", &val);
 	ok(!rval, "rval is %d", rval);
 	is(val, "2");
 
