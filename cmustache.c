@@ -170,11 +170,11 @@ jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offs
 	if (!offset || !length)
 		return EX_LOGIC_ERROR;
 
-	if (!key || !strlen(key))
-		return 0;
-
 	*offset = 0;
 	*length = 0;
+
+	if (!key || !strlen(key))
+		return 0;
 
 	debug_printf("jsonpath('%s', %lu, '%s')\n", json, jsonlen, key);
 
@@ -260,11 +260,11 @@ jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offs
 }
 
 void
-sectiontocontext(char section[][MAX_KEYSZ], int sectionidx, char *dst)
+sectiontocontext(char section[][MAX_KEYSZ], int fromidx, int toidx, char *dst)
 {
 	*dst = '\0';
-	for (int i = 0; i < sectionidx; i++) {
-		if (i)
+	for (int i = fromidx; i < toidx; i++) {
+		if (i > fromidx)
 			strcat(dst, ".");
 		strcat(dst, section[i]);
 	}
@@ -280,6 +280,7 @@ get(const char *json, size_t jsonlen, char section[][MAX_KEYSZ], int sectionidx,
 	int		rval = 0;
 	int		loop_limit = 1000;
 	int		loop_i = 0;
+	int		fromidx = 0;
 	unsigned short	offset = 0;
 	unsigned short	length = 0;
 
@@ -298,7 +299,7 @@ get(const char *json, size_t jsonlen, char section[][MAX_KEYSZ], int sectionidx,
 	if (!json || !strlen(json))
 		return 0;
 
-	sectiontocontext(section, sectionidx, context);
+	sectiontocontext(section, fromidx, sectionidx, context);
 
 	while ( !rval && !*val && context ) {
 	
@@ -339,9 +340,8 @@ get(const char *json, size_t jsonlen, char section[][MAX_KEYSZ], int sectionidx,
 		 * The section didn't have key.
 		 * Move up one section and try again.
 		 */
-
-					sectionidx--;
-					sectiontocontext(section, sectionidx, context);
+					fromidx++;
+					sectiontocontext(section, fromidx, sectionidx, context);
 
 				}
 			}
@@ -541,7 +541,7 @@ is_section_falsey(const char *json, char section[][MAX_KEYSZ], int sectionidx, i
 	*drop = 0;
 	if (strlen(section[sectionidx])) {
 
-		sectiontocontext(section, sectionidx, tag);
+		sectiontocontext(section, 0, sectionidx, tag);
 
 		rval = get(json, strlen(json), 0, 0, tag, &val);
 
