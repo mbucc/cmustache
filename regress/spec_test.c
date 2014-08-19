@@ -110,10 +110,10 @@ get_test(char *tests, unsigned short *index)
 	 *
 	 */
 
-	get(testjson, strlen(testjson), 0, "data", &rval->json);
-	get(testjson, strlen(testjson), 0, "template", &rval->template);
-	get(testjson, strlen(testjson), 0, "expected", &rval->expected);
-	get(testjson, strlen(testjson), 0, "desc", &rval->description);
+	get(testjson, strlen(testjson), 0, 0, "data", &rval->json);
+	get(testjson, strlen(testjson), 0, 0, "template", &rval->template);
+	get(testjson, strlen(testjson), 0, 0, "expected", &rval->expected);
+	get(testjson, strlen(testjson), 0, 0, "desc", &rval->description);
 
 	return rval;
 
@@ -129,21 +129,18 @@ parse_tests(char *json)
 
 	vec_init(&tests_vec);
 
-	rval = get(json, strlen(json), 0, "tests", &tests);
+	rval = get(json, strlen(json), 0, 0, "tests", &tests);
 
 	if (rval)
-		errx(rval, "get returned an error");
+		errx(rval, "Failed to parse test JSON, get returned error %d", rval);
 
 	if (!tests)
 		return tests_vec;
 
 	index_json(tests, strlen(tests), &index);
 
-
-	for (unsigned short *i = index; *i; i += 2) {
-
+	for (unsigned short *i = index; *i; i += 2)
 		vec_push(&tests_vec, get_test(tests, i));
-	}
 
 	free(index);
 
@@ -209,7 +206,7 @@ main (int argc, char *argv[])
 		 */
 		test_number = i + 1;
 
-		if (test_number == 4 ) {
+		if (test_number == 2 ) {
 
 			rval = render( test->template, test->json, &result );
 

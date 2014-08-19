@@ -260,21 +260,22 @@ jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offs
 }
 
 void
-sectiontocontext(char section[][MAX_KEYSZ], int fromidx, int toidx, char *dst)
+sectiontocontext(char section[][MAX_KEYSZ], int fromidx, int sections_n, char *dst)
 {
 	*dst = '\0';
-	for (int i = fromidx; i < toidx; i++) {
+	for (int i = fromidx; i < sections_n; i++) {
 		if (i > fromidx)
 			strcat(dst, ".");
 		strcat(dst, section[i]);
 	}
+	printf("sectiontocontext(...,%d, %d) --> '%s'\n", fromidx, sections_n, dst);
 }
 
 
 // Lookup a key's value and copy it to *val.
 // If the key is not found, *val is set to NULL.
 int
-get(const char *json, size_t jsonlen, char section[][MAX_KEYSZ], int sectionidx, const char *key, char **val)
+get(const char *json, size_t jsonlen, char section[][MAX_KEYSZ], int sections_n, const char *key, char **val)
 {
 	char		context[(MAX_KEYSZ + 1) * MAX_SECTION_DEPTH + 1] = {0};
 	int		rval = 0;
@@ -284,7 +285,7 @@ get(const char *json, size_t jsonlen, char section[][MAX_KEYSZ], int sectionidx,
 	unsigned short	offset = 0;
 	unsigned short	length = 0;
 
-	debug_printf("get('%s', %lu, '%s', '%s')\n", json, jsonlen, section[sectionidx], key);
+	debug_printf("get('%s', %lu, '%s', '%s')\n", json, jsonlen, section[sections_n], key);
 
 	if (!val)
 		return EX_LOGIC_ERROR;
@@ -299,9 +300,9 @@ get(const char *json, size_t jsonlen, char section[][MAX_KEYSZ], int sectionidx,
 	if (!json || !strlen(json))
 		return 0;
 
-	sectiontocontext(section, fromidx, sectionidx, context);
+	sectiontocontext(section, fromidx, sections_n, context);
 
-	while ( !rval && !*val && context ) {
+	while ( !rval && !*val && context && strlen(context) ) {
 	
 		if (loop_i++ >= loop_limit)
 			rval = EX_LOGIC_ERROR;
@@ -341,7 +342,7 @@ get(const char *json, size_t jsonlen, char section[][MAX_KEYSZ], int sectionidx,
 		 * Move up one section and try again.
 		 */
 					fromidx++;
-					sectiontocontext(section, fromidx, sectionidx, context);
+					sectiontocontext(section, fromidx, sections_n, context);
 
 				}
 			}
@@ -389,13 +390,13 @@ get(const char *json, size_t jsonlen, char section[][MAX_KEYSZ], int sectionidx,
 
 // Look up value in JSON for the given key, and insert it into the result.
 int
-insert_value(char section[][MAX_KEYSZ], int sectionidx, char *tag, char **qhtml, char *json, int raw)
+insert_value(char section[][MAX_KEYSZ], int sections_n, char *tag, char **qhtml, char *json, int raw)
 {
 	int 		rval = 0;
 	char		*val = 0;
 	char		*escaped = 0;
 
-	debug_printf("insert_value('%s', '%s', '%s', '%s', %d)\n", section[sectionidx], tag, *qhtml, json, raw);
+	debug_printf("insert_value('%s', '%s', '%s', '%s', %d)\n", section[sections_n], tag, *qhtml, json, raw);
 
 	if (!rval) {
 		/*
@@ -410,7 +411,7 @@ insert_value(char section[][MAX_KEYSZ], int sectionidx, char *tag, char **qhtml,
 	}
 
 	if (!rval)
-		rval = get(json, strlen(json), section, sectionidx, tag, &val);
+		rval = get(json, strlen(json), section, sections_n, tag, &val);
 
 
 	if (!rval) {
@@ -474,24 +475,23 @@ add_to_tag(char **qtag, char *tag, char c)
 		 */
 
 int
-push_section(char *tag,  char section[][MAX_KEYSZ], int *sectionidx)
+push_section(char *tag,  char section[][MAX_KEYSZ], int *sections_n)
 {
 	int rval = 0;
-
 	if (!tag || !strlen(tag))
 		return rval;
 
 	if (strlen(tag) + 1 >= MAX_KEYSZ)
 		rval = EX_TAG_TOO_LONG;
 
-	if (*sectionidx >= MAX_SECTION_DEPTH - 1)
+	if (*sections_n >= MAX_SECTION_DEPTH - 1)
 		rval = EX_TOO_MANY_SECTIONS;
 
 	if (!rval)
-		strcpy(section[*sectionidx++], tag);
+		strcpy(section[(*sections_n)++], tag);
 	
 	if (!rval)
-		debug_printf("		push_section('%s') --> 'sectionidx = %d'\n", tag, *sectionidx);
+		debug_printf("		push_section('%s') --> 'sections_n = %d'\n", tag, *sections_n);
 	else
 		debug_printf("		push_section('%s') --> 'rval = %d'\n", tag, rval);
 
@@ -500,31 +500,26 @@ push_section(char *tag,  char section[][MAX_KEYSZ], int *sectionidx)
 
 
 int
-pop_section(char *tag, char section[][MAX_KEYSZ], int *sectionidx)
+pop_section(char *tag, char section[][MAX_KEYSZ], int *sections_n)
 {
 	int rval = 0;
 
-	if (!section) {
-		if (tag)
-			rval = EX_POP_DOES_NOT_MATCH;
-		else
+	if (!tag || !strlen(tag))
 
 		/*
 		 * Ignore empty tags.
 		 */
 
-			return rval;
-	}
+		return rval;
 
-	if (!rval)
-		if (strcmp(tag, section[*sectionidx]) != 0)
+	if (sections_n == 0 || strcmp(tag, section[*sections_n - 1]) )
 			rval = EX_POP_DOES_NOT_MATCH;
 
 	if (!rval)
-		section[*sectionidx--][0] = '\0';
+		section[(*sections_n)--][0] = '\0';
 
 	if (!rval)
-		debug_printf("		pop_section('%s') --> sectionidx = %d\n", tag, *sectionidx);
+		debug_printf("		pop_section('%s') --> sections_n = %d\n", tag, *sections_n);
 	else
 		debug_printf("		pop_section('%s') --> rval = %d\n", tag, rval);
 
@@ -532,20 +527,16 @@ pop_section(char *tag, char section[][MAX_KEYSZ], int *sectionidx)
 }
 
 int
-is_section_falsey(const char *json, char section[][MAX_KEYSZ], int sectionidx, int *drop)
+is_section_falsey(const char *json, char section[][MAX_KEYSZ], int sections_n, int *drop)
 {
 	char *val = 0;
 	char	tag[(MAX_KEYSZ + 1) * MAX_SECTION_DEPTH] = {0};
 	int rval = 0;
 
 	*drop = 0;
-	if (strlen(section[sectionidx])) {
-
-		sectiontocontext(section, 0, sectionidx, tag);
-
+	sectiontocontext(section, 0, sections_n, tag);
+	if (tag && strlen(tag))
 		rval = get(json, strlen(json), 0, 0, tag, &val);
-
-	}
 
 		/*
 		 * Only drop section if it is explicitly
@@ -572,7 +563,7 @@ render(const char *template, char *json, char **html)
 	char		prevprev;
 	char		*qhtml = 0;
 	char		*qtag = 0;
-	int		sectionidx = 0;
+	int		sections_n = 0;
 	int		drop = 0;
 	int		rval = 0;
 
@@ -798,9 +789,9 @@ render(const char *template, char *json, char **html)
 	l_yes_xpush:
 		go = gohtml;
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xpush");
-		rval = push_section(tag, section, &sectionidx);
+		rval = push_section(tag, section, &sections_n);
 		if (!rval)
-			rval = is_section_falsey(json, section, sectionidx, &drop);
+			rval = is_section_falsey(json, section, sections_n, &drop);
 		memset(tag, 0, MAX_KEYSZ);
 		goto l_loop;
 
@@ -820,9 +811,9 @@ render(const char *template, char *json, char **html)
 	l_yes_xpop:
 		go = gohtml;
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xpop");
-		rval = pop_section(tag, section, &sectionidx);
+		rval = pop_section(tag, section, &sections_n);
 		if (!rval)
-			rval = is_section_falsey(json, section, sectionidx, &drop);
+			rval = is_section_falsey(json, section, sections_n, &drop);
 		memset(tag, 0, MAX_KEYSZ);
 		goto l_loop;
 
@@ -844,7 +835,7 @@ render(const char *template, char *json, char **html)
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xtag");
 		debug_printf("before insert, html = \"%s\"\n", *html);
 		if (!drop)
-			rval = insert_value(section, sectionidx, tag, &qhtml, json, 0);
+			rval = insert_value(section, sections_n, tag, &qhtml, json, 0);
 		debug_printf("after insert, html = \"%s\"\n", *html);
 		memset(tag, 0, MAX_KEYSZ);
 		goto l_loop;
@@ -882,7 +873,7 @@ render(const char *template, char *json, char **html)
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xraw");
 		debug_printf("before insert raw, html = \"%s\"\n", *html);
 		if (!drop)
-			rval = insert_value(section, sectionidx, tag, &qhtml, json, 1);
+			rval = insert_value(section, sections_n, tag, &qhtml, json, 1);
 		debug_printf("after insert raw, html = \"%s\"\n", *html);
 		memset(tag, 0, MAX_KEYSZ);
 		goto l_loop;
