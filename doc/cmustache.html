@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+  <title>cmustache.c</title>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta name="viewport" content="width=device-width, target-densitydpi=160dpi, initial-scale=1.0; maximum-scale=1.0; user-scalable=0;">
+  <link rel="stylesheet" media="all" href="docco.css" />
+</head>
+<body>
+  <div id="container">
+    <div id="background"></div>
+    
+    <ul class="sections">
+        
+          <li id="title">
+              <div class="annotation">
+                  <h1>cmustache.c</h1>
+              </div>
+          </li>
+        
+        
+        
+        <li id="section-1">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-1">&#182;</a>
+              </div>
+              
+            </div>
+            
+            <div class="content"><div class='highlight'><pre><span class="hljs-preprocessor">#<span class="hljs-keyword">include</span> &lt;sys/errno.h&gt;</span>
+
+<span class="hljs-preprocessor">#<span class="hljs-keyword">include</span> &lt;ctype.h&gt;</span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">include</span> &lt;err.h&gt;</span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">include</span> &lt;limits.h&gt;</span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">include</span> &lt;stddef.h&gt;</span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">include</span> &lt;stdio.h&gt;</span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">include</span> &lt;stdlib.h&gt;</span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">include</span> &lt;string.h&gt;</span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">include</span> &lt;sysexits.h&gt;</span>
+
+<span class="hljs-preprocessor">#<span class="hljs-keyword">include</span> "js0n.h"</span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">include</span> "j0g.h"</span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">include</span> "htmlescape.h"</span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">include</span> "vec.h"</span>
+
+<span class="hljs-preprocessor">#<span class="hljs-keyword">include</span> "cmustache.h"</span>
+
+<span class="hljs-preprocessor">#<span class="hljs-keyword">define</span> BUFSZ_DELTA	10240</span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">define</span> DOT			'.'</span>
+
+
+		<span class="hljs-comment">/*
+		 * Add -DDEUG to CFLAGS in Makefile to turn on debug output.
+		 */</span>
+<span class="hljs-preprocessor">#ifdef DEBUG</span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">define</span> DEBUG_PRINT 1</span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">else</span></span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">define</span> DEBUG_PRINT 0</span>
+<span class="hljs-preprocessor">#<span class="hljs-keyword">endif</span></span>
+
+<span class="hljs-preprocessor">#<span class="hljs-keyword">define</span> debug_printf(fmt, ...) \</span>
+        <span class="hljs-keyword">do</span> { <span class="hljs-keyword">if</span> (DEBUG_PRINT) <span class="hljs-built_in">fprintf</span>(stderr, <span class="hljs-string">"%s:%d:%s(): "</span> fmt, __FILE__, \
+                                __LINE__, __func__, __VA_ARGS__); } <span class="hljs-keyword">while</span> (<span class="hljs-number">0</span>)</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-2">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-2">&#182;</a>
+              </div>
+              <p>Compute the size of an array
+that is large enough to hold one offset and one length value
+for each key and each value in the JSON.
+Allocate the array.
+Return the array and it’s size.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre><span class="hljs-keyword">int</span>
+size_index(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *json, size_t jsonlen, <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> **indexp, <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">int</span> *iszp)
+{
+	<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>	*p;
+	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">long</span>		n = <span class="hljs-number">0</span>;
+
+		<span class="hljs-comment">/*
+		 * (one key + one value) x (one offset + one length) = 4
+		 */</span>
+
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">int</span> entriesPerComma = <span class="hljs-number">4</span>;
+
+		<span class="hljs-comment">/*
+		 * We need at least one extra slot (js0n zero-terminates
+		 * the array) plus four for the last key/value pair.
+		 * Add some more for safety ...
+		 */</span>
+
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">int</span> extra = <span class="hljs-number">21</span>;
+
+		<span class="hljs-comment">/*
+		 * The number of commas in JSON is an upper limit
+		 * on the number of key/value pairs - 1.
+		 */</span>
+
+	<span class="hljs-keyword">for</span> (p = json; !rval &amp;&amp; p - json &lt; jsonlen; p++) {
+		n += (*p == <span class="hljs-string">','</span>);
+		<span class="hljs-keyword">if</span> (n &gt;= UINT_MAX)
+			rval = EX_TOO_MANY_KEYVAL_PAIRS;
+	}
+
+	<span class="hljs-keyword">if</span> (!rval)
+		*iszp = (<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">int</span>) n;
+
+		<span class="hljs-comment">/*
+		 * The array holds short ints, but the array index
+		 * is an unsigned int, so we check against UINT_MAX.
+		 */</span>
+
+	<span class="hljs-keyword">if</span> (!rval &amp;&amp; (<span class="hljs-keyword">long</span>) *iszp + extra &gt; UINT_MAX / entriesPerComma)
+		rval = EX_TOO_MANY_KEYVAL_PAIRS;
+
+	<span class="hljs-keyword">if</span> (!rval) {
+		*iszp *= entriesPerComma;
+		*iszp += extra;
+	}
+
+	<span class="hljs-keyword">if</span> (!rval)
+		<span class="hljs-keyword">if</span> ((*indexp = <span class="hljs-built_in">calloc</span>(*iszp, <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">int</span>))) == NULL)
+			rval = ENOMEM;
+
+	<span class="hljs-keyword">return</span> rval;
+
+}</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-3">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-3">&#182;</a>
+              </div>
+              <p>Allocate and load the set of offset and length pairs
+for the key/values in the given JSON.  Zero-terminate
+the array.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre><span class="hljs-keyword">int</span>
+index_json(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *json, size_t jsonlen, <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> **indexp)
+{
+	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">int</span>	isz;
+
+	<span class="hljs-keyword">if</span> (!json || !<span class="hljs-built_in">strlen</span>(json) || !indexp)
+		<span class="hljs-keyword">return</span> rval;
+
+	rval = size_index(json, jsonlen, indexp, &amp;isz);
+
+	<span class="hljs-keyword">if</span> (!rval) {
+
+		rval = js0n((<span class="hljs-keyword">const</span> <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">char</span> *) json, jsonlen, *indexp, isz);
+
+		<span class="hljs-keyword">if</span> (rval)
+
+			rval = EX_JSON_PARSE_ERROR;
+	}
+
+	<span class="hljs-keyword">return</span> rval;
+
+}
+
+<span class="hljs-keyword">int</span>
+is_obj(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *json, size_t jsonlen) 
+{
+	<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>	*p;
+	<span class="hljs-keyword">for</span> (p = json; <span class="hljs-built_in">isspace</span>(*p) &amp;&amp; p - json &lt; jsonlen; p++);
+	<span class="hljs-keyword">return</span> *p == <span class="hljs-string">'{'</span>;
+}</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-4">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-4">&#182;</a>
+              </div>
+              <p>Trim whitespace off ends of value.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre><span class="hljs-keyword">void</span>
+trim(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *json, <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> *offset, <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> *length)
+{
+	<span class="hljs-keyword">if</span> (!offset || !length || !json)
+		<span class="hljs-keyword">return</span>;
+
+	<span class="hljs-keyword">while</span> (<span class="hljs-built_in">isspace</span>(*(json + *offset)) &amp;&amp; *length &gt; <span class="hljs-number">0</span>) {
+		(*offset)++;
+		(*length)--;
+	}
+
+	<span class="hljs-keyword">while</span> (<span class="hljs-built_in">isspace</span>(*(json + *offset + *length - <span class="hljs-number">1</span>)) &amp;&amp; *length &gt; <span class="hljs-number">0</span>) {
+		(*length)--;
+	}
+
+}</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-5">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-5">&#182;</a>
+              </div>
+              <p>Given a (perhaps dotted) key, return the offset and length
+of the value of this key.</p>
+<p>If key is not found, offset is set to 0.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre><span class="hljs-keyword">int</span>
+jsonpath(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *json, size_t jsonlen, <span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *key, <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> *offset, <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> *length)
+{
+	<span class="hljs-keyword">char</span>		*keybuf = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">char</span>		*p = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	*index = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	suboffset = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	sublength = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">int</span>		idx = <span class="hljs-number">0</span>;
+
+	<span class="hljs-keyword">if</span> (!offset || !length)
+		<span class="hljs-keyword">return</span> EX_LOGIC_ERROR;
+
+	*offset = <span class="hljs-number">0</span>;
+	*length = <span class="hljs-number">0</span>;
+
+	<span class="hljs-keyword">if</span> (!key || !<span class="hljs-built_in">strlen</span>(key))
+		<span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+
+	debug_printf(<span class="hljs-string">"jsonpath('%s', %lu, '%s')\n"</span>, json, jsonlen, key);
+
+	<span class="hljs-keyword">if</span> (!json || !<span class="hljs-built_in">strlen</span>(json))
+		<span class="hljs-keyword">return</span> rval;
+
+	<span class="hljs-keyword">if</span> (!key || !<span class="hljs-built_in">strlen</span>(key))
+		<span class="hljs-keyword">return</span> rval;
+
+		<span class="hljs-comment">/*
+		 * Only JSON objects have keys.
+		 * If we are not in an object, 
+		 * we ran out of levels to parse down into
+		 * and the key is not found.
+		 */</span>
+	<span class="hljs-keyword">if</span> ( ! is_obj(json, jsonlen) )
+		<span class="hljs-keyword">return</span> rval;
+
+	rval = index_json(json, jsonlen, &amp;index);
+
+	<span class="hljs-keyword">if</span> (!rval) {
+		idx = j0g_val(key, (<span class="hljs-keyword">char</span> *) json, index);
+
+		<span class="hljs-comment">/*
+		 * If the key is found, then idx &gt;= 2.
+		 */</span>
+
+		<span class="hljs-keyword">if</span> (idx != <span class="hljs-number">0</span>) {
+			*offset = index[idx];
+			*length = index[idx + <span class="hljs-number">1</span>];
+			trim(json, offset, length);
+		}
+	}
+
+		<span class="hljs-comment">/*
+		 * If key not found, look for it one level down.
+		 */</span>
+
+	<span class="hljs-keyword">if</span> (!rval &amp;&amp; *offset == <span class="hljs-number">0</span>) {
+		keybuf = <span class="hljs-built_in">calloc</span>(<span class="hljs-built_in">strlen</span>(key), <span class="hljs-number">1</span>);
+		<span class="hljs-keyword">if</span> (!keybuf)
+			rval = ENOMEM;
+	}
+
+	<span class="hljs-keyword">if</span> (!rval &amp;&amp; *offset == <span class="hljs-number">0</span>) {
+		<span class="hljs-built_in">strcpy</span>(keybuf, key);
+		p = <span class="hljs-built_in">strchr</span>(keybuf, DOT);
+		<span class="hljs-keyword">if</span> (p) {
+			*p++ = <span class="hljs-string">'\0'</span>;
+			idx = j0g_val(keybuf, (<span class="hljs-keyword">char</span> *) json, index);
+			<span class="hljs-keyword">if</span> (idx != <span class="hljs-number">0</span>) {
+				suboffset = index[idx];
+				sublength = index[idx + <span class="hljs-number">1</span>];
+				json += suboffset;
+				rval =  jsonpath(json, sublength, p, offset, length);
+
+				<span class="hljs-keyword">if</span> (!rval &amp;&amp; *offset != <span class="hljs-number">0</span>) {
+					trim(json, offset, length);
+					*offset += suboffset;
+				}
+				<span class="hljs-keyword">else</span>
+					<span class="hljs-comment">/* EMTPY -- if offset is zero, then key is not found. */</span>
+					;
+			}
+			<span class="hljs-keyword">else</span>
+				<span class="hljs-comment">/* EMPTY -- if an part of key is not found, then the full key is not found. */</span>
+				;
+		}
+		<span class="hljs-keyword">else</span>
+			<span class="hljs-comment">/* EMPTY -- no dots in key, so no subsection to look in ... the key's not found. */</span>
+			;
+	}
+
+
+	<span class="hljs-built_in">free</span>(index);
+	<span class="hljs-built_in">free</span>(keybuf);
+
+	debug_printf(<span class="hljs-string">"		--&gt; jsonpath returns offset, length = %u, %u\n"</span>, *offset, *length);
+		
+	<span class="hljs-keyword">return</span> rval;
+
+}
+
+<span class="hljs-keyword">void</span>
+sectiontocontext(<span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> fromidx, <span class="hljs-keyword">int</span> sections_n, <span class="hljs-keyword">char</span> *dst)
+{
+	*dst = <span class="hljs-string">'\0'</span>;
+	<span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> i = fromidx; i &lt; sections_n; i++) {
+		<span class="hljs-keyword">if</span> (i &gt; fromidx)
+			<span class="hljs-built_in">strcat</span>(dst, <span class="hljs-string">"."</span>);
+		<span class="hljs-built_in">strcat</span>(dst, section[i]);
+	}
+	<span class="hljs-built_in">printf</span>(<span class="hljs-string">"sectiontocontext(...,%d, %d) --&gt; '%s'\n"</span>, fromidx, sections_n, dst);
+}
+
+<span class="hljs-keyword">int</span>
+peeloff_sections_from_top(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>  * <span class="hljs-keyword">const</span> json, size_t jsonlen, <span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, <span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *key, <span class="hljs-keyword">char</span> **val)
+{
+	<span class="hljs-keyword">char</span>		context[(MAX_KEYSZ + <span class="hljs-number">1</span>) * MAX_SECTION_DEPTH + <span class="hljs-number">1</span>] = {<span class="hljs-number">0</span>};
+	<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>		*p;
+	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">int</span>		loop_limit = <span class="hljs-number">1000</span>;
+	<span class="hljs-keyword">int</span>		loop_i = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">int</span>		fromidx = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	offset = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	length = <span class="hljs-number">0</span>;
+
+	sectiontocontext(section, fromidx, sections_n, context);
+
+	p = json;
+
+	<span class="hljs-keyword">while</span> ( !rval &amp;&amp; !*val &amp;&amp; <span class="hljs-built_in">strlen</span>(context) ) {
+	
+		<span class="hljs-keyword">if</span> (loop_i++ &gt;= loop_limit)
+			rval = EX_LOGIC_ERROR;
+
+		<span class="hljs-keyword">if</span> (!rval)
+			rval = jsonpath(p, jsonlen, context, &amp;offset, &amp;length);
+
+		<span class="hljs-keyword">if</span> (!rval &amp;&amp; offset) {
+
+		<span class="hljs-comment">/*
+		 * The JSON has this section, see if the section has the key.
+		 */</span>
+
+			p += offset;
+			rval = jsonpath(p, length, key, &amp;offset, &amp;length);
+		}
+
+		<span class="hljs-keyword">if</span> (!rval &amp;&amp; offset) {
+
+		<span class="hljs-comment">/*
+		 * We found the key in the current section.
+		 */</span>
+
+			*val = <span class="hljs-built_in">calloc</span>(length + <span class="hljs-number">1</span>, <span class="hljs-number">1</span>);
+			<span class="hljs-keyword">if</span> (*val)
+				<span class="hljs-built_in">strncat</span>(*val, p + offset, length);
+			<span class="hljs-keyword">else</span>
+				rval = ENOMEM;
+		}
+		
+		<span class="hljs-keyword">if</span> (!rval &amp;&amp; !*val) {
+			fromidx++;
+			sectiontocontext(section, fromidx, sections_n, context);
+		}
+
+	}
+
+	<span class="hljs-keyword">return</span> rval;
+
+}
+
+<span class="hljs-keyword">int</span>
+peeloff_sections_from_bottom(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>  * <span class="hljs-keyword">const</span> json, size_t jsonlen, <span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, <span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *key, <span class="hljs-keyword">char</span> **val)
+{
+	<span class="hljs-keyword">char</span>		context[(MAX_KEYSZ + <span class="hljs-number">1</span>) * MAX_SECTION_DEPTH + <span class="hljs-number">1</span>] = {<span class="hljs-number">0</span>};
+	<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>		*p;
+	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">int</span>		loop_limit = <span class="hljs-number">1000</span>;
+	<span class="hljs-keyword">int</span>		loop_i = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	offset = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	length = <span class="hljs-number">0</span>;
+
+	sectiontocontext(section, <span class="hljs-number">0</span>, sections_n--, context);
+
+	p = json;
+
+	<span class="hljs-keyword">while</span> ( !rval &amp;&amp; !*val &amp;&amp; context &amp;&amp; <span class="hljs-built_in">strlen</span>(context) ) {
+	
+		<span class="hljs-keyword">if</span> (loop_i++ &gt;= loop_limit)
+			rval = EX_LOGIC_ERROR;
+
+		<span class="hljs-keyword">if</span> (!rval)
+			rval = jsonpath(p, jsonlen, context, &amp;offset, &amp;length);
+
+		<span class="hljs-keyword">if</span> (!rval &amp;&amp; offset) {
+			p += offset;
+			rval = jsonpath(p, length, key, &amp;offset, &amp;length);
+		}
+
+		<span class="hljs-keyword">if</span> (!rval &amp;&amp; offset) {
+			*val = <span class="hljs-built_in">calloc</span>(length + <span class="hljs-number">1</span>, <span class="hljs-number">1</span>);
+			<span class="hljs-keyword">if</span> (*val)
+				<span class="hljs-built_in">strncat</span>(*val, p + offset, length);
+			<span class="hljs-keyword">else</span>
+				rval = ENOMEM;
+		}
+		
+		<span class="hljs-keyword">if</span> (!rval &amp;&amp; !*val)
+			sectiontocontext(section, <span class="hljs-number">0</span>, sections_n--, context);
+
+	}
+
+	<span class="hljs-keyword">return</span> rval;
+
+}</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-6">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-6">&#182;</a>
+              </div>
+              <p>Lookup a key’s value and copy it to <em>val.
+If the key is not found, </em>val is set to NULL.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre><span class="hljs-keyword">int</span>
+get(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>  * <span class="hljs-keyword">const</span> json, size_t jsonlen, <span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, <span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *key, <span class="hljs-keyword">char</span> **val)
+{
+	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	offset = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	length = <span class="hljs-number">0</span>;
+
+	debug_printf(<span class="hljs-string">"get('%s', %lu, '%s', '%s')\n"</span>, json, jsonlen, section[sections_n], key);
+
+	<span class="hljs-keyword">if</span> (!val)
+		<span class="hljs-keyword">return</span> EX_LOGIC_ERROR;
+
+	*val = <span class="hljs-number">0</span>;
+
+		<span class="hljs-comment">/*
+		 * No data is not an error.
+		 * The key's value is the empty string.
+		 */</span>
+
+	<span class="hljs-keyword">if</span> (!json || !<span class="hljs-built_in">strlen</span>(json))
+		<span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+
+	<span class="hljs-keyword">if</span> (!rval)
+		rval = peeloff_sections_from_top(json, jsonlen, section, sections_n, key, val);
+
+
+	<span class="hljs-keyword">if</span> (!rval &amp;&amp; !*val)
+		rval = peeloff_sections_from_bottom(json, jsonlen, section, sections_n, key, val);
+
+		<span class="hljs-comment">/*
+		 * If not found in section, try global context.
+		 */</span>
+
+	<span class="hljs-keyword">if</span> (!rval &amp;&amp; !*val) {
+
+		rval = jsonpath(json, jsonlen, key, &amp;offset, &amp;length);
+
+		<span class="hljs-keyword">if</span> (!rval) {
+			<span class="hljs-keyword">if</span>  (offset) {
+				*val = <span class="hljs-built_in">calloc</span>(length + <span class="hljs-number">1</span>, <span class="hljs-number">1</span>);
+				<span class="hljs-keyword">if</span> (*val)
+					<span class="hljs-built_in">strncat</span>(*val, json + offset, length);
+				<span class="hljs-keyword">else</span>
+					rval = ENOMEM;
+			}
+		}
+				
+	}
+
+	debug_printf(<span class="hljs-string">"\"%s\" returns \"%s\" (rval = %d)\n"</span>, key, *val, rval);
+
+	<span class="hljs-keyword">return</span> rval;
+
+}</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-7">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-7">&#182;</a>
+              </div>
+              <p>Look up value in JSON for the given key, and insert it into the result.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre><span class="hljs-keyword">int</span>
+insert_value(<span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, <span class="hljs-keyword">char</span> *tag, <span class="hljs-keyword">char</span> **qhtml, <span class="hljs-keyword">char</span> *json, <span class="hljs-keyword">int</span> raw)
+{
+	<span class="hljs-keyword">int</span> 		rval = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">char</span>		*val = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">char</span>		*escaped = <span class="hljs-number">0</span>;
+
+	debug_printf(<span class="hljs-string">"insert_value('%s', '%s', '%s', '%s', %d)\n"</span>, section[sections_n], tag, *qhtml, json, raw);
+
+	<span class="hljs-keyword">if</span> (!rval) {
+		<span class="hljs-comment">/*
+		 * A tag that starts with an ampersand
+		 * is the same as a triple brace.
+		 */</span>
+	
+		<span class="hljs-keyword">if</span> (tag[<span class="hljs-number">0</span>] == <span class="hljs-string">'&amp;'</span>) {
+			raw = <span class="hljs-number">1</span>;
+			tag = tag + <span class="hljs-number">1</span>;
+		}
+	}
+
+	<span class="hljs-keyword">if</span> (!rval)
+		rval = get(json, <span class="hljs-built_in">strlen</span>(json), section, sections_n, tag, &amp;val);
+
+
+	<span class="hljs-keyword">if</span> (!rval) {
+		<span class="hljs-keyword">if</span> (raw)
+			escaped = val;
+		<span class="hljs-keyword">else</span>
+			rval = htmlescape(val, &amp;escaped);
+	}
+
+	<span class="hljs-keyword">if</span> (!rval &amp;&amp; escaped) {
+		<span class="hljs-built_in">strcpy</span>(*qhtml, escaped);
+		*qhtml += <span class="hljs-built_in">strlen</span>(*qhtml);
+	}
+
+	<span class="hljs-keyword">if</span> (!raw)
+		<span class="hljs-built_in">free</span>(escaped);
+
+	<span class="hljs-keyword">return</span> rval;
+}
+
+		<span class="hljs-comment">/*
+		 * Return true if the character is in the given, inclusive, range.
+		 */</span>
+<span class="hljs-keyword">int</span> 
+in(<span class="hljs-keyword">char</span> c, <span class="hljs-keyword">char</span> lo, <span class="hljs-keyword">char</span> hi)
+{
+	<span class="hljs-keyword">return</span> (c &gt;= lo) &amp;&amp; (c &lt;= hi);
+}</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-8">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-8">&#182;</a>
+              </div>
+              <p><a href="http://en.wikipedia.org/wiki/Character_encodings_in_HTML#Illegal_characters">http://en.wikipedia.org/wiki/Character_encodings_in_HTML#Illegal_characters</a></p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre><span class="hljs-keyword">int</span>
+badchar(<span class="hljs-keyword">char</span> c)
+{
+	<span class="hljs-keyword">return</span>  in(c, <span class="hljs-number">1</span>, <span class="hljs-number">8</span>)
+		|| in(c, <span class="hljs-number">11</span>, <span class="hljs-number">12</span>)
+		|| in(c, <span class="hljs-number">14</span>, <span class="hljs-number">31</span>)
+		|| in(c, <span class="hljs-number">127</span>, <span class="hljs-number">159</span>)
+		;
+}
+
+<span class="hljs-keyword">int</span>
+add_to_tag(<span class="hljs-keyword">char</span> **qtag, <span class="hljs-keyword">char</span> *tag, <span class="hljs-keyword">char</span> c)
+{
+	debug_printf(<span class="hljs-string">"add_to_tag('%s', '%s', %c)\n"</span>, *qtag, tag, c);
+	<span class="hljs-keyword">if</span> (*qtag - tag &gt;= MAX_KEYSZ - <span class="hljs-number">1</span>)
+		<span class="hljs-keyword">return</span> EX_TAG_TOO_LONG;
+	<span class="hljs-keyword">if</span> (!<span class="hljs-built_in">isspace</span>(c))
+		*(*qtag)++ = c;
+	<span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+}
+
+		<span class="hljs-comment">/*
+		 * As we drill deeper into sub and subsections,
+		 * just mash them together with a period delimiter.
+		 *
+		 * Dotted names are section short-hand in the spec,
+		 * so this should work.
+		 *
+		 * While not specified in the interpolation spec,
+		 * we do prohibit periods in the section names.
+		 */</span>
+
+<span class="hljs-keyword">int</span>
+push_section(<span class="hljs-keyword">char</span> *tag,  <span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> *sections_n)
+{
+	<span class="hljs-keyword">int</span> rval = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">if</span> (!tag || !<span class="hljs-built_in">strlen</span>(tag))
+		<span class="hljs-keyword">return</span> rval;
+
+	<span class="hljs-keyword">if</span> (<span class="hljs-built_in">strlen</span>(tag) + <span class="hljs-number">1</span> &gt;= MAX_KEYSZ)
+		rval = EX_TAG_TOO_LONG;
+
+	<span class="hljs-keyword">if</span> (*sections_n &gt;= MAX_SECTION_DEPTH - <span class="hljs-number">1</span>)
+		rval = EX_TOO_MANY_SECTIONS;
+
+	<span class="hljs-keyword">if</span> (!rval)
+		<span class="hljs-built_in">strcpy</span>(section[(*sections_n)++], tag);
+	
+	<span class="hljs-keyword">if</span> (!rval)
+		debug_printf(<span class="hljs-string">"		push_section('%s') --&gt; 'sections_n = %d'\n"</span>, tag, *sections_n);
+	<span class="hljs-keyword">else</span>
+		debug_printf(<span class="hljs-string">"		push_section('%s') --&gt; 'rval = %d'\n"</span>, tag, rval);
+
+	<span class="hljs-keyword">return</span> rval;
+}
+
+
+<span class="hljs-keyword">int</span>
+pop_section(<span class="hljs-keyword">char</span> *tag, <span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> *sections_n)
+{
+	<span class="hljs-keyword">int</span> rval = <span class="hljs-number">0</span>;
+
+	<span class="hljs-keyword">if</span> (!tag || !<span class="hljs-built_in">strlen</span>(tag))
+
+		<span class="hljs-comment">/*
+		 * Ignore empty tags.
+		 */</span>
+
+		<span class="hljs-keyword">return</span> rval;
+
+	<span class="hljs-keyword">if</span> (sections_n == <span class="hljs-number">0</span> || <span class="hljs-built_in">strcmp</span>(tag, section[*sections_n - <span class="hljs-number">1</span>]) )
+			rval = EX_POP_DOES_NOT_MATCH;
+
+	<span class="hljs-keyword">if</span> (!rval)
+		section[(*sections_n)--][<span class="hljs-number">0</span>] = <span class="hljs-string">'\0'</span>;
+
+	<span class="hljs-keyword">if</span> (!rval)
+		debug_printf(<span class="hljs-string">"		pop_section('%s') --&gt; sections_n = %d\n"</span>, tag, *sections_n);
+	<span class="hljs-keyword">else</span>
+		debug_printf(<span class="hljs-string">"		pop_section('%s') --&gt; rval = %d\n"</span>, tag, rval);
+
+	<span class="hljs-keyword">return</span> rval;
+}
+
+<span class="hljs-keyword">int</span>
+is_section_falsey(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *json, <span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, <span class="hljs-keyword">int</span> *drop)
+{
+	<span class="hljs-keyword">char</span> *val = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">char</span>	tag[(MAX_KEYSZ + <span class="hljs-number">1</span>) * MAX_SECTION_DEPTH] = {<span class="hljs-number">0</span>};
+	<span class="hljs-keyword">int</span> rval = <span class="hljs-number">0</span>;
+
+	*drop = <span class="hljs-number">0</span>;
+	sectiontocontext(section, <span class="hljs-number">0</span>, sections_n, tag);
+	<span class="hljs-keyword">if</span> (tag &amp;&amp; <span class="hljs-built_in">strlen</span>(tag))
+		rval = get(json, <span class="hljs-built_in">strlen</span>(json), <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, tag, &amp;val);
+
+		<span class="hljs-comment">/*
+		 * Only drop section if it is explicitly
+		 * set to falsey in JSON.
+		 */</span>
+
+	<span class="hljs-keyword">if</span> (!rval &amp;&amp; val &amp;&amp; *val)
+		*drop = !<span class="hljs-built_in">strcmp</span>(val, <span class="hljs-string">"false"</span>);
+
+	debug_printf(<span class="hljs-string">"is_section_falsey('%s', '%s') --&gt; %d (rval = %d)\n"</span>, json, tag, *drop, rval);
+
+	<span class="hljs-keyword">return</span> rval;
+}</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-9">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-9">&#182;</a>
+              </div>
+              <p>Given a mustache template and some JSON, render the HTML.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre><span class="hljs-keyword">int</span>
+render(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *<span class="hljs-keyword">template</span>, <span class="hljs-keyword">char</span> *json, <span class="hljs-keyword">char</span> **html)
+{
+	<span class="hljs-keyword">char</span>		section[MAX_SECTION_DEPTH][MAX_KEYSZ] = {{<span class="hljs-number">0</span>}};
+	<span class="hljs-keyword">char</span>		tag[MAX_KEYSZ] = {<span class="hljs-number">0</span>};
+	<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>	*cur= <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">char</span>		prev;
+	<span class="hljs-keyword">char</span>		prevprev;
+	<span class="hljs-keyword">char</span>		*qhtml = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">char</span>		*qtag = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">int</span>		sections_n = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">int</span>		drop = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
+
+	debug_printf(<span class="hljs-string">"%s\n"</span>, <span class="hljs-string">"Starting to render"</span>);
+
+		<span class="hljs-comment">/*
+		 * The states and their transitions.
+		 */</span>
+
+
+	<span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> *gohtml[] =
+	{
+		[<span class="hljs-number">0</span> ... <span class="hljs-number">122</span>]	= &amp;&amp;l_html,
+		[ <span class="hljs-string">'{'</span> ]		= &amp;&amp;l_tagp,
+		[<span class="hljs-number">124</span> ... <span class="hljs-number">255</span>]	= &amp;&amp;l_html
+	};
+
+	<span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> *gotagp[] =
+	{
+		[<span class="hljs-number">0</span> ... <span class="hljs-number">122</span>]	= &amp;&amp;l_no_tag,
+		[ <span class="hljs-string">'{'</span> ]		= &amp;&amp;l_rawtagp,
+		[<span class="hljs-number">124</span> ... <span class="hljs-number">255</span>]	= &amp;&amp;l_no_tag
+	};
+
+	<span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> *gorawtagp[] =
+	{
+		[<span class="hljs-number">0</span> ... <span class="hljs-number">34</span>]	= &amp;&amp;l_no_rawtag,
+		[ <span class="hljs-string">'#'</span> ]		= &amp;&amp;l_yes_push,	<span class="hljs-comment">// 35</span>
+		[<span class="hljs-number">36</span> ... <span class="hljs-number">46</span>]	= &amp;&amp;l_no_rawtag,
+		[ <span class="hljs-string">'/'</span> ]		= &amp;&amp;l_yes_pop,	<span class="hljs-comment">// 47</span>
+		[<span class="hljs-number">48</span> ... <span class="hljs-number">122</span>]	= &amp;&amp;l_no_rawtag,
+		[ <span class="hljs-string">'{'</span> ]		= &amp;&amp;l_yes_rawtag,	<span class="hljs-comment">// 123</span>
+		[<span class="hljs-number">124</span> ... <span class="hljs-number">255</span>]	= &amp;&amp;l_no_rawtag
+	};
+
+	<span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> *gopush[] =
+	{
+		[<span class="hljs-number">0</span> ... <span class="hljs-number">45</span> ]	= &amp;&amp;l_push,
+		[ DOT ]		= &amp;&amp;l_bad_section,	<span class="hljs-comment">// 46</span>
+		[<span class="hljs-number">47</span> ... <span class="hljs-number">124</span> ]	= &amp;&amp;l_push,
+		[ <span class="hljs-string">'}'</span> ]		= &amp;&amp;l_xpushp,	<span class="hljs-comment">// 125</span>
+		[<span class="hljs-number">126</span> ... <span class="hljs-number">255</span>]	= &amp;&amp;l_push
+	};
+
+	<span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> *goxpushp[] =
+	{
+		[<span class="hljs-number">0</span> ... <span class="hljs-number">124</span> ]	= &amp;&amp;l_no_xpush,
+		[ <span class="hljs-string">'}'</span> ]		= &amp;&amp;l_yes_xpush,	<span class="hljs-comment">// 125</span>
+		[<span class="hljs-number">126</span> ... <span class="hljs-number">255</span>]	= &amp;&amp;l_no_xpush
+	};
+
+	<span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> *gopop[] =
+	{
+		[<span class="hljs-number">0</span> ... <span class="hljs-number">45</span> ]	= &amp;&amp;l_pop,
+		[ DOT ]		= &amp;&amp;l_bad_section,	<span class="hljs-comment">// 46</span>
+		[<span class="hljs-number">47</span> ... <span class="hljs-number">124</span> ]	= &amp;&amp;l_pop,
+		[ <span class="hljs-string">'}'</span> ]		= &amp;&amp;l_xpopp,	<span class="hljs-comment">// 125</span>
+		[<span class="hljs-number">126</span> ... <span class="hljs-number">255</span>]	= &amp;&amp;l_pop
+	};
+
+	<span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> *goxpopp[] =
+	{
+		[<span class="hljs-number">0</span> ... <span class="hljs-number">124</span> ]	= &amp;&amp;l_no_xpop,
+		[ <span class="hljs-string">'}'</span> ]			= &amp;&amp;l_yes_xpop,	<span class="hljs-comment">// 125</span>
+		[<span class="hljs-number">126</span> ... <span class="hljs-number">255</span>]	= &amp;&amp;l_no_xpop
+	};
+
+	<span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> *gotag[] =
+	{
+		[<span class="hljs-number">0</span> ... <span class="hljs-number">124</span> ]	= &amp;&amp;l_tag,
+		[ <span class="hljs-string">'}'</span> ]			= &amp;&amp;l_xtagp,	<span class="hljs-comment">// 125</span>
+		[<span class="hljs-number">126</span> ... <span class="hljs-number">255</span>]	= &amp;&amp;l_tag
+	};
+
+	<span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> *goxtagp[] =
+	{
+		[<span class="hljs-number">0</span> ... <span class="hljs-number">124</span>]	= &amp;&amp;l_no_xtag,
+		[ <span class="hljs-string">'}'</span> ]		= &amp;&amp;l_yes_xtag,
+		[<span class="hljs-number">126</span> ... <span class="hljs-number">255</span>]	= &amp;&amp;l_no_xtag
+	};
+
+	<span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> *gorawtag[] =
+	{
+		[<span class="hljs-number">0</span> ... <span class="hljs-number">124</span> ]	= &amp;&amp;l_rawtag,
+		[ <span class="hljs-string">'}'</span> ]			= &amp;&amp;l_xrawpp,	<span class="hljs-comment">// 125</span>
+		[<span class="hljs-number">126</span> ... <span class="hljs-number">255</span>]	= &amp;&amp;l_rawtag
+	};
+
+	<span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> *goxrawpp[] =
+	{
+		[<span class="hljs-number">0</span> ... <span class="hljs-number">124</span>]	= &amp;&amp;l_no_xrawp,
+		[ <span class="hljs-string">'}'</span> ]		= &amp;&amp;l_yes_xrawp,
+		[<span class="hljs-number">126</span> ... <span class="hljs-number">255</span>]	= &amp;&amp;l_no_xrawp
+	};
+
+	<span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> *goxrawp[] =
+	{
+		[<span class="hljs-number">0</span> ... <span class="hljs-number">124</span>]	= &amp;&amp;l_no_xraw,
+		[ <span class="hljs-string">'}'</span> ]		= &amp;&amp;l_yes_xraw,	<span class="hljs-comment">// 125</span>
+		[<span class="hljs-number">126</span> ... <span class="hljs-number">255</span>]	= &amp;&amp;l_no_xraw
+	};
+
+		<span class="hljs-comment">/*
+		 * Allocate memory to hold HTML.
+		 */</span>
+
+	<span class="hljs-keyword">if</span> (!rval) {
+
+		*html = (<span class="hljs-keyword">char</span> *) <span class="hljs-built_in">calloc</span>(BUFSZ_DELTA, <span class="hljs-number">1</span>);
+
+		<span class="hljs-keyword">if</span>  ( *html == NULL)
+			rval = ENOMEM;
+
+		qhtml = *html;
+	}
+
+		<span class="hljs-comment">/*
+		 * Start in the HTML state.
+		 */</span>
+
+	<span class="hljs-keyword">void</span> **go = gohtml;
+
+		<span class="hljs-comment">/*
+		 * Process template, one character at a time.
+		 */</span>
+
+
+	<span class="hljs-keyword">for</span>(cur = <span class="hljs-keyword">template</span>; *cur &amp;&amp; !rval; cur++)
+	{
+		debug_printf(<span class="hljs-string">"%c\n"</span>, *cur);
+		<span class="hljs-keyword">if</span> (badchar(*cur))
+			rval = EX_INVALID_CHAR;
+		<span class="hljs-keyword">else</span>
+			<span class="hljs-keyword">goto</span> *go[(<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">char</span>) *cur];
+		l_loop:
+		prev = *cur;
+		prevprev = prev;
+	}
+
+	<span class="hljs-keyword">return</span> rval;
+
+		<span class="hljs-comment">/*
+		 * The behavior on transition.
+		 */</span>
+
+	l_bad_section:
+		rval = EX_INVALID_SECTION_NAME;
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_html:
+		<span class="hljs-keyword">if</span> (!drop)
+			*qhtml++ = *cur;
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_tagp:
+		go = gotagp;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gotagp"</span>, <span class="hljs-string">"l_tagp"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_no_tag:
+		*qhtml++ = prev;
+		*qhtml++ = *cur;
+		go = gohtml;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gohtml"</span>, <span class="hljs-string">"l_no_tag"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_rawtagp:
+		go = gorawtagp;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gorawtagp"</span>, <span class="hljs-string">"l_rawtagp"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_no_rawtag:
+		qtag = tag;
+		rval = add_to_tag(&amp;qtag, tag, *cur);
+		go = gotag;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gotag"</span>, <span class="hljs-string">"l_no_rawtag"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_yes_push:
+		qtag = tag;
+		go = gopush;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gopush"</span>, <span class="hljs-string">"l_yes_push"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_yes_pop:
+		qtag = tag;
+		go = gopop;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gopop"</span>, <span class="hljs-string">"l_yes_pop"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_yes_rawtag:
+		qtag = tag;
+		go = gorawtag;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gorawtag"</span>, <span class="hljs-string">"l_yes_rawtag"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_push:
+		<span class="hljs-comment">/* FALLTHROUGH */</span>
+
+	l_pop:
+		<span class="hljs-comment">/* FALLTHROUGH */</span>
+
+	l_rawtag:
+		<span class="hljs-comment">/* FALLTHROUGH */</span>
+
+	l_tag:
+		rval = add_to_tag(&amp;qtag, tag, *cur);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_xpushp:
+		go = goxpushp;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"goxpushp"</span>, <span class="hljs-string">"l_xpushp"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_no_xpush:
+		rval = add_to_tag(&amp;qtag, tag, prev);
+		<span class="hljs-keyword">if</span> (!rval)
+			rval = add_to_tag(&amp;qtag, tag, *cur);
+		go = gopush;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gopush"</span>, <span class="hljs-string">"l_no_xpush"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_yes_xpush:
+		go = gohtml;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gohtml"</span>, <span class="hljs-string">"l_yes_xpush"</span>);
+		rval = push_section(tag, section, &amp;sections_n);
+		<span class="hljs-keyword">if</span> (!rval)
+			rval = is_section_falsey(json, section, sections_n, &amp;drop);
+		<span class="hljs-built_in">memset</span>(tag, <span class="hljs-number">0</span>, MAX_KEYSZ);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_xpopp:
+		go = goxpopp;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"goxpopp"</span>, <span class="hljs-string">"l_xpopp"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_no_xpop:
+		rval = add_to_tag(&amp;qtag, tag, prev);
+		<span class="hljs-keyword">if</span> (!rval)
+			rval = add_to_tag(&amp;qtag, tag, *cur);
+		go = gopop;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gopop"</span>, <span class="hljs-string">"l_no_xpop"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_yes_xpop:
+		go = gohtml;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gohtml"</span>, <span class="hljs-string">"l_yes_xpop"</span>);
+		rval = pop_section(tag, section, &amp;sections_n);
+		<span class="hljs-keyword">if</span> (!rval)
+			rval = is_section_falsey(json, section, sections_n, &amp;drop);
+		<span class="hljs-built_in">memset</span>(tag, <span class="hljs-number">0</span>, MAX_KEYSZ);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_xtagp:
+		go = goxtagp;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"goxtagp"</span>, <span class="hljs-string">"l_xtagp"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_no_xtag:
+		rval = add_to_tag(&amp;qtag, tag, prev);
+		<span class="hljs-keyword">if</span> (!rval)
+			rval = add_to_tag(&amp;qtag, tag, *cur);
+		go = gotag;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gotag"</span>, <span class="hljs-string">"l_no_xtag"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_yes_xtag:
+		go = gohtml;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gohtml"</span>, <span class="hljs-string">"l_yes_xtag"</span>);
+		debug_printf(<span class="hljs-string">"before insert, html = \"%s\"\n"</span>, *html);
+		<span class="hljs-keyword">if</span> (!drop)
+			rval = insert_value(section, sections_n, tag, &amp;qhtml, json, <span class="hljs-number">0</span>);
+		debug_printf(<span class="hljs-string">"after insert, html = \"%s\"\n"</span>, *html);
+		<span class="hljs-built_in">memset</span>(tag, <span class="hljs-number">0</span>, MAX_KEYSZ);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_xrawpp:
+		go = goxrawpp;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"goxrawpp"</span>, <span class="hljs-string">"l_xrawpp"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_no_xrawp:
+		rval = add_to_tag(&amp;qtag, tag, prev);
+		<span class="hljs-keyword">if</span> (!rval)
+			rval = add_to_tag(&amp;qtag, tag, *cur);
+		go = gorawtag;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gorawtag"</span>, <span class="hljs-string">"l_no_xrawp"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_yes_xrawp:
+		go = goxrawp;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"goxrawp"</span>, <span class="hljs-string">"l_yes_xrawp"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_no_xraw:
+		rval = add_to_tag(&amp;qtag, tag, prevprev);;
+		<span class="hljs-keyword">if</span> (!rval)
+			rval = add_to_tag(&amp;qtag, tag, prev);
+		<span class="hljs-keyword">if</span> (!rval)
+			rval = add_to_tag(&amp;qtag, tag, *cur);
+		go = gorawtag;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gorawtag"</span>, <span class="hljs-string">"l_no_xraw"</span>);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+	l_yes_xraw:
+		go = gohtml;
+		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gohtml"</span>, <span class="hljs-string">"l_yes_xraw"</span>);
+		debug_printf(<span class="hljs-string">"before insert raw, html = \"%s\"\n"</span>, *html);
+		<span class="hljs-keyword">if</span> (!drop)
+			rval = insert_value(section, sections_n, tag, &amp;qhtml, json, <span class="hljs-number">1</span>);
+		debug_printf(<span class="hljs-string">"after insert raw, html = \"%s\"\n"</span>, *html);
+		<span class="hljs-built_in">memset</span>(tag, <span class="hljs-number">0</span>, MAX_KEYSZ);
+		<span class="hljs-keyword">goto</span> l_loop;
+
+}</pre></div></div>
+            
+        </li>
+        
+    </ul>
+  </div>
+</body>
+</html>
