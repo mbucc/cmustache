@@ -1,0 +1,31 @@
+{
+    "tests": [
+        {
+            "data": {
+                "a": {
+                    "b": {
+                        "c": {
+                            "name": "mark"
+                        }
+                    }
+                }
+            },
+            "desc": "The canonical nested context.",
+            "expected": "mark",
+            "template": "{{#a}}{{#b}}{{#c}}{{name}}{{/c}}{{/b}}{{/a}}"
+        },
+        {
+            "data": {
+                "a": {
+                    "b": {
+                        "c": {},
+                        "name": "mark"
+                    }
+                }
+            },
+            "desc": "Key is up one context level.",
+            "expected": "mark",
+            "template": "{{#a}}{{#b}}{{#c}}{{name}}{{/c}}{{/b}}{{/a}}"
+        }
+    ]
+}
