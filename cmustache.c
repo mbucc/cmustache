@@ -282,7 +282,7 @@ sectiontocontext(char section[][MAX_KEYSZ], int fromidx, int sections_n, char *d
 			strcat(dst, ".");
 		strcat(dst, section[i]);
 	}
-	printf("sectiontocontext(...,%d, %d) --> '%s'\n", fromidx, sections_n, dst);
+	//printf("sectiontocontext(...,%d, %d) --> '%s'\n", fromidx, sections_n, dst);
 }
 
 int

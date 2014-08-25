@@ -5,11 +5,7 @@
                 "a": {
                     "b": {
                         "c": {
-                            "name": "mark"
-                        }
-                    }
-                }
-            },
+                            "name": "mark" } } } },
             "desc": "The canonical nested context.",
             "expected": "mark",
             "template": "{{#a}}{{#b}}{{#c}}{{name}}{{/c}}{{/b}}{{/a}}"
@@ -18,12 +14,39 @@
             "data": {
                 "a": {
                     "b": {
-                        "c": {},
-                        "name": "mark"
-                    }
-                }
-            },
-            "desc": "Key is up one context level.",
+                        "name": "mark",
+                        "c": {} } } },
+            "desc": "Key is an attribute of b.",
+            "expected": "mark",
+            "template": "{{#a}}{{#b}}{{#c}}{{name}}{{/c}}{{/b}}{{/a}}"
+        },
+        {
+            "data": {
+                "a": {
+                    "name": "mark",
+                    "b": {
+                        "c": {} } } },
+            "desc": "Key is an attribute of a.",
+            "expected": "mark",
+            "template": "{{#a}}{{#b}}{{#c}}{{name}}{{/c}}{{/b}}{{/a}}"
+        },
+        {
+            "data": {
+                "name": "mark",
+                "a": {
+                    "b": {
+                        "c": {} }  } },
+            "desc": "Key is an attribute of root object.",
+            "expected": "mark",
+            "template": "{{#a}}{{#b}}{{#c}}{{name}}{{/c}}{{/b}}{{/a}}"
+        },
+        {
+            "data": {
+                "a": {
+                    "b": {} },
+                "c": {
+                    "name": "mark" } },
+            "desc": "Key is an attribute of c. ci is attribute of root.",
             "expected": "mark",
             "template": "{{#a}}{{#b}}{{#c}}{{name}}{{/c}}{{/b}}{{/a}}"
         }
