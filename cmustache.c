@@ -282,83 +282,73 @@ sectiontocontext(char section[][MAX_KEYSZ], int fromidx, int sections_n, char *d
 			strcat(dst, ".");
 		strcat(dst, section[i]);
 	}
-	//printf("sectiontocontext(...,%d, %d) --> '%s'\n", fromidx, sections_n, dst);
 }
+
 
 int
 peeloff_sections_from_top(const char  * const json, size_t jsonlen, 
 		char section[][MAX_KEYSZ], int sections_n, 
 		const char *key, char **val)
 {
-	char		context[(MAX_KEYSZ + 1) * MAX_SECTION_DEPTH + 1] = {0};
-	const char		*p;
+	const char	*p = 0;
+	size_t		len = 0;
 	int		rval = 0;
-	int		loop_limit = 1000;
-	int		loop_i = 0;
-	int		fromidx = 0;
 	unsigned short	offset = 0;
 	unsigned short	length = 0;
 
-	sectiontocontext(section, fromidx, sections_n, context);
+	// Loop through all contexts, starting with first section base.
+	for (int base = 0; !rval && !*val && base < sections_n; base++) {
 
-	p = json;
-
-	while ( !rval && !*val && strlen(context) ) {
-	
-		if (loop_i++ >= loop_limit)
-			rval = EX_LOGIC_ERROR;
-
-		if (!rval)
-			rval = jsonpath(p, jsonlen, context, &offset, &length);
-
-		if (!rval && offset) {
-
-		/*
-		 * The JSON has this section, see if the section has the key.
-		 */
-
+		// Get json starting at current section base.
+		p = json;
+		len = jsonlen;
+		for (int i = base; !rval && i < sections_n && len > 0;i++) {
+			rval = jsonpath(p, len, section[i], &offset, &length);
 			p += offset;
-			rval = jsonpath(p, length, key, &offset, &length);
+			len = length;
 		}
 
+		// Look for key is in this section's json (aka "context").
+		if (!rval && len)
+			rval = jsonpath(p, len, key, &offset, &length);
+
 		if (!rval && offset) {
-
-		/*
-		 * We found the key in the current section.
-		 */
-
+			// We found the key so make a copy of its value.
 			*val = calloc(length + 1, 1);
 			if (*val)
 				strncat(*val, p + offset, length);
 			else
 				rval = ENOMEM;
 		}
-		
-		if (!rval && !*val) {
-			fromidx++;
-			sectiontocontext(section, fromidx, sections_n, context);
-		}
-
 	}
 
 	return rval;
 
+
 }
 
+// Look up key, first in deepest section.
+// If not found, peel off sections one-by-one looking for key in each.
+//
+// For example, if section array is `{"a", "b"}`, 
+// first look for key in `{a: {b: {<here>} } }`
+// then in `{a: {<here>} }`,
+// and finally in root object `{<here>}`.
 int
 peeloff_sections_from_bottom(const char *json, size_t jsonlen,
 		char section[][MAX_KEYSZ], int sections_n, 
 		const char *key, char **val)
 {
-	int		rval = 0;
-	size_t	len = 0;
 	const char	*p = 0;
+	size_t		len = 0;
+	int		rval = 0;
 	unsigned short	offset = 0;
 	unsigned short	length = 0;
 
+	// Loop through all contexts, starting at full section depth.
 	for (int depth = sections_n; !rval && !*val && depth > 0; depth--) {
 
-		// Drill down and get json at current section depth.
+		// Get json at current section depth.
 		p = json;
 		len = jsonlen;
 		for (int i = 0; !rval && i < depth && len > 0;i++) {
@@ -367,7 +357,7 @@ peeloff_sections_from_bottom(const char *json, size_t jsonlen,
 			len = length;
 		}
 
-		// See if the key is in this section (aka "context").
+		// Look for key is in this section's json (aka "context").
 		if (!rval && len)
 			rval = jsonpath(p, len, key, &offset, &length);
 
@@ -413,11 +403,9 @@ get(const char  * const json, size_t jsonlen,
 	if (!json || !strlen(json))
 		return 0;
 
-/*
 
 	if (!rval)
 		rval = peeloff_sections_from_top(json, jsonlen, section, sections_n, key, val);
-*/
 
 
 	if (!rval && !*val)
