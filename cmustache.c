@@ -34,23 +34,30 @@
                                 __LINE__, __func__, __VA_ARGS__); } while (0)
 
 
-// Compute the size of an array
-// that is large enough to hold one offset and one length value
-// for each key and each value in the JSON.
-// Allocate the array.
-// Return the array and it's size.
+// The js0n library scans the json string
+// and records the (offset, length) pair for each key and each value
+// found in the json string.
+//
+// This routine calculates the size of the array (\*iszp) required
+// for the given a json string
+// and allocates a storage array of unsigned shorts (\*\*indexp).
+//
+// If the memory allocation fails, it returns ENOMEM.
+// 
+// If the required length overflows an unsigned int, 
+// it returns EX_TOO_MANY_KEYVAL_PAIRS.
 int
 size_index(const char *json, size_t jsonlen, unsigned short **indexp, unsigned int *iszp)
 {
 	const char	*p;
 	int		rval = 0;
-	long		n = 0;
+	size_t		n = 0;
 
 		/*
 		 * (one key + one value) x (one offset + one length) = 4
 		 */
 
-	unsigned int entriesPerComma = 4;
+	unsigned int entries_per_comma = 4;
 
 		/*
 		 * We need at least one extra slot (js0n zero-terminates
@@ -63,6 +70,9 @@ size_index(const char *json, size_t jsonlen, unsigned short **indexp, unsigned i
 		/*
 		 * The number of commas in JSON is an upper limit
 		 * on the number of key/value pairs - 1.
+		 * 
+		 * Note: On my macbook pro, it takes 8.62 seconds to count
+		 * to UINT_MAX by one's.  Probably could use a lower limit.
 		 */
 
 	for (p = json; !rval && p - json < jsonlen; p++) {
@@ -70,35 +80,34 @@ size_index(const char *json, size_t jsonlen, unsigned short **indexp, unsigned i
 		if (n >= UINT_MAX)
 			rval = EX_TOO_MANY_KEYVAL_PAIRS;
 	}
-
-	if (!rval)
-		*iszp = (unsigned int) n;
-
 		/*
 		 * The array holds short ints, but the array index
 		 * is an unsigned int, so we check against UINT_MAX.
 		 */
 
-	if (!rval && (long) *iszp + extra > UINT_MAX / entriesPerComma)
+	if (!rval && n > UINT_MAX / entries_per_comma - extra)
 		rval = EX_TOO_MANY_KEYVAL_PAIRS;
 
 	if (!rval) {
-		*iszp *= entriesPerComma;
+		*iszp = (unsigned int) n;
+		*iszp *= entries_per_comma;
 		*iszp += extra;
-	}
-
-	if (!rval)
 		if ((*indexp = calloc(*iszp, sizeof(unsigned int))) == NULL)
 			rval = ENOMEM;
+	}
 
 	return rval;
 
 }
 
 
+
 // Allocate and load the set of offset and length pairs
 // for the key/values in the given JSON.  Zero-terminate
 // the array.
+//
+// Returns 0 on success, 
+// EX_JSON_PARSE_ERROR if there was an error parsing JSON.
 int
 index_json(const char *json, size_t jsonlen, unsigned short **indexp)
 {
@@ -123,6 +132,7 @@ index_json(const char *json, size_t jsonlen, unsigned short **indexp)
 
 }
 
+// Return 1 if the first non-whitespace character in json is a '{', 0 otherwise.
 int
 is_obj(const char *json, size_t jsonlen) 
 {
@@ -134,7 +144,9 @@ is_obj(const char *json, size_t jsonlen)
 
 
 
-// Trim whitespace off ends of value.
+// Move the offset and length so
+// the character sequence they define
+// does not start or end with whitespace.
 void
 trim(const char *json, unsigned short *offset, unsigned short *length)
 {
@@ -152,12 +164,14 @@ trim(const char *json, unsigned short *offset, unsigned short *length)
 
 }
 
-// Given a (perhaps dotted) key, return the offset and length
-// of the value of this key.
+// Given a json string and a key, 
+// return the offset and length
+// of the key's value.
 //
 // If key is not found, offset is set to 0.
 int
-jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offset, unsigned short *length)
+jsonpath(const char *json, size_t jsonlen, const char *key, 
+		unsigned short *offset, unsigned short *length)
 {
 	char		*keybuf = 0;
 	char		*p = 0;
@@ -173,45 +187,40 @@ jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offs
 	*offset = 0;
 	*length = 0;
 
+	// An empty key never has a value.
 	if (!key || !strlen(key))
 		return 0;
 
 	debug_printf("jsonpath('%s', %lu, '%s')\n", json, jsonlen, key);
 
+	// Nor does a key in empty json.
 	if (!json || !strlen(json))
 		return rval;
 
-	if (!key || !strlen(key))
-		return rval;
-
-		/*
-		 * Only JSON objects have keys.
-		 * If we are not in an object, 
-		 * we ran out of levels to parse down into
-		 * and the key is not found.
-		 */
+	// Only json objects have keys.
 	if ( ! is_obj(json, jsonlen) )
 		return rval;
 
+	// Look for key in current JSON object.
 	rval = index_json(json, jsonlen, &index);
-
 	if (!rval) {
 		idx = j0g_val(key, (char *) json, index);
 
-		/*
-		 * If the key is found, then idx >= 2.
-		 */
-
 		if (idx != 0) {
+			// We found the key.  
+			// Set offset, length, and trim off whitespace.
 			*offset = index[idx];
 			*length = index[idx + 1];
 			trim(json, offset, length);
 		}
 	}
 
-		/*
-		 * If key not found, look for it one level down.
-		 */
+	// We didn't find the key so try to recurse down through json.
+	//
+	// For example,
+	// if the key = "a.b"
+	// and we didn't find "a.b" as an attribute of  the top-level json object,
+	// then ...
 
 	if (!rval && *offset == 0) {
 		keybuf = calloc(strlen(key), 1);
@@ -223,12 +232,18 @@ jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offs
 		strcpy(keybuf, key);
 		p = strchr(keybuf, DOT);
 		if (p) {
+			//
+			// ... we look for a top-level attribute named "a" ...
+			//
 			*p++ = '\0';
 			idx = j0g_val(keybuf, (char *) json, index);
 			if (idx != 0) {
 				suboffset = index[idx];
 				sublength = index[idx + 1];
 				json += suboffset;
+				//
+				// ... and look for the key "b" in that.
+				//
 				rval =  jsonpath(json, sublength, p, offset, length);
 
 				if (!rval && *offset != 0) {
@@ -253,7 +268,6 @@ jsonpath(const char *json, size_t jsonlen, const char *key, unsigned short *offs
 	free(keybuf);
 
 	debug_printf("		--> jsonpath returns offset, length = %u, %u\n", *offset, *length);
-
 		
 	return rval;
 
@@ -271,13 +285,13 @@ sectiontocontext(char section[][MAX_KEYSZ], int fromidx, int sections_n, char *d
 	printf("sectiontocontext(...,%d, %d) --> '%s'\n", fromidx, sections_n, dst);
 }
 
-
-// Lookup a key's value and copy it to *val.
-// If the key is not found, *val is set to NULL.
 int
-get(const char *json, size_t jsonlen, char section[][MAX_KEYSZ], int sections_n, const char *key, char **val)
+peeloff_sections_from_top(const char  * const json, size_t jsonlen, 
+		char section[][MAX_KEYSZ], int sections_n, 
+		const char *key, char **val)
 {
 	char		context[(MAX_KEYSZ + 1) * MAX_SECTION_DEPTH + 1] = {0};
+	const char		*p;
 	int		rval = 0;
 	int		loop_limit = 1000;
 	int		loop_i = 0;
@@ -285,81 +299,129 @@ get(const char *json, size_t jsonlen, char section[][MAX_KEYSZ], int sections_n,
 	unsigned short	offset = 0;
 	unsigned short	length = 0;
 
-	debug_printf("get('%s', %lu, '%s', '%s')\n", json, jsonlen, section[sections_n], key);
-
-	if (!val)
-		return EX_LOGIC_ERROR;
-
-	*val = 0;
-
-		/*
-		 * No data is not an error.
-		 * The key's value is the empty string.
-		 */
-
-	if (!json || !strlen(json))
-		return 0;
-
 	sectiontocontext(section, fromidx, sections_n, context);
 
-	while ( !rval && !*val && context && strlen(context) ) {
+	p = json;
+
+	while ( !rval && !*val && strlen(context) ) {
 	
 		if (loop_i++ >= loop_limit)
 			rval = EX_LOGIC_ERROR;
 
 		if (!rval)
-			rval = jsonpath(json, jsonlen, context, &offset, &length);
+			rval = jsonpath(p, jsonlen, context, &offset, &length);
 
-		if (!rval) {
-			if (offset) {
+		if (!rval && offset) {
 
 		/*
 		 * The JSON has this section, see if the section has the key.
 		 */
 
-				json += offset;
-				rval = jsonpath(json, length, key, &offset, &length);
-			}
-
-			if (!rval) {
-
-				if  (offset) {
-		/*
-		 * Victory, we found the key in the current section.
-		 */
-
-					*val = calloc(length + 1, 1);
-					if (*val)
-						strncat(*val, json + offset, length);
-					else
-						rval = ENOMEM;
-				}
-
-				else {
-
-		/*
-		 * The section didn't have key.
-		 * Move up one section and try again.
-		 */
-					fromidx++;
-					sectiontocontext(section, fromidx, sections_n, context);
-
-				}
-			}
-			else
-
-		/* 
-		 * EMPTY -- jsonpath() error looking up key in section.
-		 */
-				;
+			p += offset;
+			rval = jsonpath(p, length, key, &offset, &length);
 		}
-		else
+
+		if (!rval && offset) {
 
 		/*
-		 * EMPTY -- jsonpath() error looking up section in json.
+		 * We found the key in the current section.
 		 */
-			;
+
+			*val = calloc(length + 1, 1);
+			if (*val)
+				strncat(*val, p + offset, length);
+			else
+				rval = ENOMEM;
+		}
+		
+		if (!rval && !*val) {
+			fromidx++;
+			sectiontocontext(section, fromidx, sections_n, context);
+		}
+
 	}
+
+	return rval;
+
+}
+
+int
+peeloff_sections_from_bottom(const char *json, size_t jsonlen,
+		char section[][MAX_KEYSZ], int sections_n, 
+		const char *key, char **val)
+{
+	int		rval = 0;
+	size_t	len = 0;
+	const char	*p = 0;
+	unsigned short	offset = 0;
+	unsigned short	length = 0;
+
+	for (int depth = sections_n; !rval && !*val && depth > 0; depth--) {
+
+		// Drill down and get json at current section depth.
+		p = json;
+		len = jsonlen;
+		for (int i = 0; !rval && i < depth && len > 0;i++) {
+			rval = jsonpath(p, len, section[i], &offset, &length);
+			p += offset;
+			len = length;
+		}
+
+		// See if the key is in this section (aka "context").
+		if (!rval && len)
+			rval = jsonpath(p, len, key, &offset, &length);
+
+		if (!rval && offset) {
+			// We found the key so make a copy of its value.
+			*val = calloc(length + 1, 1);
+			if (*val)
+				strncat(*val, p + offset, length);
+			else
+				rval = ENOMEM;
+		}
+	}
+
+	return rval;
+
+}
+
+
+
+// Lookup a key's value and copy it to \*val.
+// If the key is not found, \*val is set to NULL.
+//
+// If sections_n > 0, the key is looked up in the context of the given section.
+// See the file specs/resolution.json for details on how that works.
+int
+get(const char  * const json, size_t jsonlen, 
+		char section[][MAX_KEYSZ], int sections_n, 
+		const char *key, char **val)
+{
+	int		rval = 0;
+	unsigned short	offset = 0;
+	unsigned short	length = 0;
+
+	debug_printf("get('%s', %lu, '%s', '%s')\n", json, jsonlen, section[sections_n], key);
+
+	// The val pointer must be allocated.
+	if (!val)
+		return EX_LOGIC_ERROR;
+
+	*val = 0;
+
+	// An empty json string is not an error.
+	if (!json || !strlen(json))
+		return 0;
+
+/*
+
+	if (!rval)
+		rval = peeloff_sections_from_top(json, jsonlen, section, sections_n, key, val);
+*/
+
+
+	if (!rval && !*val)
+		rval = peeloff_sections_from_bottom(json, jsonlen, section, sections_n, key, val);
 
 		/*
 		 * If not found in section, try global context.

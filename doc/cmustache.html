@@ -74,11 +74,15 @@
               <div class="pilwrap ">
                 <a class="pilcrow" href="#section-2">&#182;</a>
               </div>
-              <p>Compute the size of an array
-that is large enough to hold one offset and one length value
-for each key and each value in the JSON.
-Allocate the array.
-Return the array and it’s size.</p>
+              <p>The js0n library scans the json string
+and records the (offset, length) pair for each key and each value
+found in the json string.</p>
+<p>This routine calculates the size of the array (*iszp) required
+for the given a json string
+and allocates a storage array of unsigned shorts (**indexp).</p>
+<p>If the memory allocation fails, it returns ENOMEM.</p>
+<p>If the required length overflows an unsigned int, 
+it returns EX_TOO_MANY_KEYVAL_PAIRS.</p>
 
             </div>
             
@@ -87,13 +91,13 @@ size_index(<span class="hljs-keyword">const</span> <span class="hljs-keyword">ch
 {
 	<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>	*p;
 	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
-	<span class="hljs-keyword">long</span>		n = <span class="hljs-number">0</span>;
+	size_t		n = <span class="hljs-number">0</span>;
 
 		<span class="hljs-comment">/*
 		 * (one key + one value) x (one offset + one length) = 4
 		 */</span>
 
-	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">int</span> entriesPerComma = <span class="hljs-number">4</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">int</span> entries_per_comma = <span class="hljs-number">4</span>;
 
 		<span class="hljs-comment">/*
 		 * We need at least one extra slot (js0n zero-terminates
@@ -106,6 +110,9 @@ size_index(<span class="hljs-keyword">const</span> <span class="hljs-keyword">ch
 		<span class="hljs-comment">/*
 		 * The number of commas in JSON is an upper limit
 		 * on the number of key/value pairs - 1.
+		 * 
+		 * Note: On my macbook pro, it takes 8.62 seconds to count
+		 * to UINT_MAX by one's.  Probably could use a lower limit.
 		 */</span>
 
 	<span class="hljs-keyword">for</span> (p = json; !rval &amp;&amp; p - json &lt; jsonlen; p++) {
@@ -113,26 +120,21 @@ size_index(<span class="hljs-keyword">const</span> <span class="hljs-keyword">ch
 		<span class="hljs-keyword">if</span> (n &gt;= UINT_MAX)
 			rval = EX_TOO_MANY_KEYVAL_PAIRS;
 	}
-
-	<span class="hljs-keyword">if</span> (!rval)
-		*iszp = (<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">int</span>) n;
-
 		<span class="hljs-comment">/*
 		 * The array holds short ints, but the array index
 		 * is an unsigned int, so we check against UINT_MAX.
 		 */</span>
 
-	<span class="hljs-keyword">if</span> (!rval &amp;&amp; (<span class="hljs-keyword">long</span>) *iszp + extra &gt; UINT_MAX / entriesPerComma)
+	<span class="hljs-keyword">if</span> (!rval &amp;&amp; n &gt; UINT_MAX / entries_per_comma - extra)
 		rval = EX_TOO_MANY_KEYVAL_PAIRS;
 
 	<span class="hljs-keyword">if</span> (!rval) {
-		*iszp *= entriesPerComma;
+		*iszp = (<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">int</span>) n;
+		*iszp *= entries_per_comma;
 		*iszp += extra;
-	}
-
-	<span class="hljs-keyword">if</span> (!rval)
 		<span class="hljs-keyword">if</span> ((*indexp = <span class="hljs-built_in">calloc</span>(*iszp, <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">int</span>))) == NULL)
 			rval = ENOMEM;
+	}
 
 	<span class="hljs-keyword">return</span> rval;
 
@@ -150,6 +152,8 @@ size_index(<span class="hljs-keyword">const</span> <span class="hljs-keyword">ch
               <p>Allocate and load the set of offset and length pairs
 for the key/values in the given JSON.  Zero-terminate
 the array.</p>
+<p>Returns 0 on success, 
+EX_JSON_PARSE_ERROR if there was an error parsing JSON.</p>
 
             </div>
             
@@ -175,14 +179,6 @@ index_json(<span class="hljs-keyword">const</span> <span class="hljs-keyword">ch
 
 	<span class="hljs-keyword">return</span> rval;
 
-}
-
-<span class="hljs-keyword">int</span>
-is_obj(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *json, size_t jsonlen) 
-{
-	<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>	*p;
-	<span class="hljs-keyword">for</span> (p = json; <span class="hljs-built_in">isspace</span>(*p) &amp;&amp; p - json &lt; jsonlen; p++);
-	<span class="hljs-keyword">return</span> *p == <span class="hljs-string">'{'</span>;
 }</pre></div></div>
             
         </li>
@@ -194,7 +190,30 @@ is_obj(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</
               <div class="pilwrap ">
                 <a class="pilcrow" href="#section-4">&#182;</a>
               </div>
-              <p>Trim whitespace off ends of value.</p>
+              <p>Return 1 if the first non-whitespace character in json is a ‘{‘, 0 otherwise.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre><span class="hljs-keyword">int</span>
+is_obj(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *json, size_t jsonlen) 
+{
+	<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>	*p;
+	<span class="hljs-keyword">for</span> (p = json; <span class="hljs-built_in">isspace</span>(*p) &amp;&amp; p - json &lt; jsonlen; p++);
+	<span class="hljs-keyword">return</span> *p == <span class="hljs-string">'{'</span>;
+}</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-5">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-5">&#182;</a>
+              </div>
+              <p>Move the offset and length so
+the character sequence they define
+does not start or end with whitespace.</p>
 
             </div>
             
@@ -218,20 +237,22 @@ trim(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</sp
         </li>
         
         
-        <li id="section-5">
+        <li id="section-6">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-5">&#182;</a>
+                <a class="pilcrow" href="#section-6">&#182;</a>
               </div>
-              <p>Given a (perhaps dotted) key, return the offset and length
-of the value of this key.</p>
+              <p>Given a json string and a key, 
+return the offset and length
+of the key’s value.</p>
 <p>If key is not found, offset is set to 0.</p>
 
             </div>
             
             <div class="content"><div class='highlight'><pre><span class="hljs-keyword">int</span>
-jsonpath(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *json, size_t jsonlen, <span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *key, <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> *offset, <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> *length)
+jsonpath(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *json, size_t jsonlen, <span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *key, 
+		<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> *offset, <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> *length)
 {
 	<span class="hljs-keyword">char</span>		*keybuf = <span class="hljs-number">0</span>;
 	<span class="hljs-keyword">char</span>		*p = <span class="hljs-number">0</span>;
@@ -245,48 +266,114 @@ jsonpath(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char
 		<span class="hljs-keyword">return</span> EX_LOGIC_ERROR;
 
 	*offset = <span class="hljs-number">0</span>;
-	*length = <span class="hljs-number">0</span>;
+	*length = <span class="hljs-number">0</span>;</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-7">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-7">&#182;</a>
+              </div>
+              <p>An empty key never has a value.</p>
 
-	<span class="hljs-keyword">if</span> (!key || !<span class="hljs-built_in">strlen</span>(key))
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>	<span class="hljs-keyword">if</span> (!key || !<span class="hljs-built_in">strlen</span>(key))
 		<span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
 
-	debug_printf(<span class="hljs-string">"jsonpath('%s', %lu, '%s')\n"</span>, json, jsonlen, key);
+	debug_printf(<span class="hljs-string">"jsonpath('%s', %lu, '%s')\n"</span>, json, jsonlen, key);</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-8">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-8">&#182;</a>
+              </div>
+              <p>Nor does a key in empty json.</p>
 
-	<span class="hljs-keyword">if</span> (!json || !<span class="hljs-built_in">strlen</span>(json))
-		<span class="hljs-keyword">return</span> rval;
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>	<span class="hljs-keyword">if</span> (!json || !<span class="hljs-built_in">strlen</span>(json))
+		<span class="hljs-keyword">return</span> rval;</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-9">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-9">&#182;</a>
+              </div>
+              <p>Only json objects have keys.</p>
 
-	<span class="hljs-keyword">if</span> (!key || !<span class="hljs-built_in">strlen</span>(key))
-		<span class="hljs-keyword">return</span> rval;
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>	<span class="hljs-keyword">if</span> ( ! is_obj(json, jsonlen) )
+		<span class="hljs-keyword">return</span> rval;</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-10">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-10">&#182;</a>
+              </div>
+              <p>Look for key in current JSON object.</p>
 
-		<span class="hljs-comment">/*
-		 * Only JSON objects have keys.
-		 * If we are not in an object, 
-		 * we ran out of levels to parse down into
-		 * and the key is not found.
-		 */</span>
-	<span class="hljs-keyword">if</span> ( ! is_obj(json, jsonlen) )
-		<span class="hljs-keyword">return</span> rval;
-
-	rval = index_json(json, jsonlen, &amp;index);
-
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>	rval = index_json(json, jsonlen, &amp;index);
 	<span class="hljs-keyword">if</span> (!rval) {
 		idx = j0g_val(key, (<span class="hljs-keyword">char</span> *) json, index);
 
-		<span class="hljs-comment">/*
-		 * If the key is found, then idx &gt;= 2.
-		 */</span>
+		<span class="hljs-keyword">if</span> (idx != <span class="hljs-number">0</span>) {</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-11">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-11">&#182;</a>
+              </div>
+              <p>We found the key.<br>Set offset, length, and trim off whitespace.</p>
 
-		<span class="hljs-keyword">if</span> (idx != <span class="hljs-number">0</span>) {
-			*offset = index[idx];
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>			*offset = index[idx];
 			*length = index[idx + <span class="hljs-number">1</span>];
 			trim(json, offset, length);
 		}
-	}
+	}</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-12">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-12">&#182;</a>
+              </div>
+              <p>We didn’t find the key so try to recurse down through json.</p>
+<p>For example,
+if the key = “a.b”
+and we didn’t find “a.b” as an attribute of  the top-level json object,
+then …</p>
 
-		<span class="hljs-comment">/*
-		 * If key not found, look for it one level down.
-		 */</span>
-
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>
 	<span class="hljs-keyword">if</span> (!rval &amp;&amp; *offset == <span class="hljs-number">0</span>) {
 		keybuf = <span class="hljs-built_in">calloc</span>(<span class="hljs-built_in">strlen</span>(key), <span class="hljs-number">1</span>);
 		<span class="hljs-keyword">if</span> (!keybuf)
@@ -296,14 +383,42 @@ jsonpath(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char
 	<span class="hljs-keyword">if</span> (!rval &amp;&amp; *offset == <span class="hljs-number">0</span>) {
 		<span class="hljs-built_in">strcpy</span>(keybuf, key);
 		p = <span class="hljs-built_in">strchr</span>(keybuf, DOT);
-		<span class="hljs-keyword">if</span> (p) {
-			*p++ = <span class="hljs-string">'\0'</span>;
+		<span class="hljs-keyword">if</span> (p) {</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-13">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-13">&#182;</a>
+              </div>
+              <p>… we look for a top-level attribute named “a” …</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>			*p++ = <span class="hljs-string">'\0'</span>;
 			idx = j0g_val(keybuf, (<span class="hljs-keyword">char</span> *) json, index);
 			<span class="hljs-keyword">if</span> (idx != <span class="hljs-number">0</span>) {
 				suboffset = index[idx];
 				sublength = index[idx + <span class="hljs-number">1</span>];
-				json += suboffset;
-				rval =  jsonpath(json, sublength, p, offset, length);
+				json += suboffset;</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-14">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-14">&#182;</a>
+              </div>
+              <p>… and look for the key “b” in that.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>				rval =  jsonpath(json, sublength, p, offset, length);
 
 				<span class="hljs-keyword">if</span> (!rval &amp;&amp; *offset != <span class="hljs-number">0</span>) {
 					trim(json, offset, length);
@@ -338,14 +453,16 @@ sectiontocontext(<span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <s
 	*dst = <span class="hljs-string">'\0'</span>;
 	<span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> i = fromidx; i &lt; sections_n; i++) {
 		<span class="hljs-keyword">if</span> (i &gt; fromidx)
-			<span class="hljs-built_in">strcat</span>(dst, <span class="hljs-string">"."</span>);
+			<span class="hljs-built_in">strcat</span>(dst, DOT);
 		<span class="hljs-built_in">strcat</span>(dst, section[i]);
 	}
 	<span class="hljs-built_in">printf</span>(<span class="hljs-string">"sectiontocontext(...,%d, %d) --&gt; '%s'\n"</span>, fromidx, sections_n, dst);
 }
 
 <span class="hljs-keyword">int</span>
-peeloff_sections_from_top(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>  * <span class="hljs-keyword">const</span> json, size_t jsonlen, <span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, <span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *key, <span class="hljs-keyword">char</span> **val)
+peeloff_sections_from_top(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>  * <span class="hljs-keyword">const</span> json, size_t jsonlen, 
+		<span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, 
+		<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *key, <span class="hljs-keyword">char</span> **val)
 {
 	<span class="hljs-keyword">char</span>		context[(MAX_KEYSZ + <span class="hljs-number">1</span>) * MAX_SECTION_DEPTH + <span class="hljs-number">1</span>] = {<span class="hljs-number">0</span>};
 	<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>		*p;
@@ -403,21 +520,15 @@ peeloff_sections_from_top(<span class="hljs-keyword">const</span> <span class="h
 }
 
 <span class="hljs-keyword">int</span>
-peeloff_sections_from_bottom(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>  * <span class="hljs-keyword">const</span> json, size_t jsonlen, <span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, <span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *key, <span class="hljs-keyword">char</span> **val)
+peeloff_sections_from_bottom(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>  * <span class="hljs-keyword">const</span> json, size_t jsonlen,
+		<span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, 
+		<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *key, <span class="hljs-keyword">char</span> **val)
 {
-	<span class="hljs-keyword">char</span>		context[(MAX_KEYSZ + <span class="hljs-number">1</span>) * MAX_SECTION_DEPTH + <span class="hljs-number">1</span>] = {<span class="hljs-number">0</span>};
-	<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>		*p;
 	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
-	<span class="hljs-keyword">int</span>		loop_limit = <span class="hljs-number">1000</span>;
-	<span class="hljs-keyword">int</span>		loop_i = <span class="hljs-number">0</span>;
 	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	offset = <span class="hljs-number">0</span>;
 	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	length = <span class="hljs-number">0</span>;
 
-	sectiontocontext(section, <span class="hljs-number">0</span>, sections_n--, context);
-
-	p = json;
-
-	<span class="hljs-keyword">while</span> ( !rval &amp;&amp; !*val &amp;&amp; context &amp;&amp; <span class="hljs-built_in">strlen</span>(context) ) {
+	<span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> depth = sections_n; !rval &amp;&amp; !*val &amp;&amp; depth &gt; <span class="hljs-number">0</span>; depth--) {
 	
 		<span class="hljs-keyword">if</span> (loop_i++ &gt;= loop_limit)
 			rval = EX_LOGIC_ERROR;
@@ -450,41 +561,69 @@ peeloff_sections_from_bottom(<span class="hljs-keyword">const</span> <span class
         </li>
         
         
-        <li id="section-6">
+        <li id="section-15">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-6">&#182;</a>
+                <a class="pilcrow" href="#section-15">&#182;</a>
               </div>
-              <p>Lookup a key’s value and copy it to <em>val.
-If the key is not found, </em>val is set to NULL.</p>
+              <p>Lookup a key’s value and copy it to *val.
+If the key is not found, *val is set to NULL.</p>
+<p>If sections_n &gt; 0, the key is looked up in the context of the given section.
+See the file specs/resolution.json for details on how that works.</p>
 
             </div>
             
             <div class="content"><div class='highlight'><pre><span class="hljs-keyword">int</span>
-get(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>  * <span class="hljs-keyword">const</span> json, size_t jsonlen, <span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, <span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *key, <span class="hljs-keyword">char</span> **val)
+get(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>  * <span class="hljs-keyword">const</span> json, size_t jsonlen, 
+		<span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, 
+		<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *key, <span class="hljs-keyword">char</span> **val)
 {
 	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
 	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	offset = <span class="hljs-number">0</span>;
 	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	length = <span class="hljs-number">0</span>;
 
-	debug_printf(<span class="hljs-string">"get('%s', %lu, '%s', '%s')\n"</span>, json, jsonlen, section[sections_n], key);
+	debug_printf(<span class="hljs-string">"get('%s', %lu, '%s', '%s')\n"</span>, json, jsonlen, section[sections_n], key);</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-16">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-16">&#182;</a>
+              </div>
+              <p>The val pointer must be allocated.</p>
 
-	<span class="hljs-keyword">if</span> (!val)
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>	<span class="hljs-keyword">if</span> (!val)
 		<span class="hljs-keyword">return</span> EX_LOGIC_ERROR;
 
-	*val = <span class="hljs-number">0</span>;
+	*val = <span class="hljs-number">0</span>;</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-17">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-17">&#182;</a>
+              </div>
+              <p>An empty json string is not an error.</p>
 
-		<span class="hljs-comment">/*
-		 * No data is not an error.
-		 * The key's value is the empty string.
-		 */</span>
-
-	<span class="hljs-keyword">if</span> (!json || !<span class="hljs-built_in">strlen</span>(json))
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>	<span class="hljs-keyword">if</span> (!json || !<span class="hljs-built_in">strlen</span>(json))
 		<span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
 
-	<span class="hljs-keyword">if</span> (!rval)
+<span class="hljs-comment">/*
+
+	if (!rval)
 		rval = peeloff_sections_from_top(json, jsonlen, section, sections_n, key, val);
+*/</span>
 
 
 	<span class="hljs-keyword">if</span> (!rval &amp;&amp; !*val)
@@ -519,11 +658,11 @@ get(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</spa
         </li>
         
         
-        <li id="section-7">
+        <li id="section-18">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-7">&#182;</a>
+                <a class="pilcrow" href="#section-18">&#182;</a>
               </div>
               <p>Look up value in JSON for the given key, and insert it into the result.</p>
 
@@ -584,11 +723,11 @@ in(<span class="hljs-keyword">char</span> c, <span class="hljs-keyword">char</sp
         </li>
         
         
-        <li id="section-8">
+        <li id="section-19">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-8">&#182;</a>
+                <a class="pilcrow" href="#section-19">&#182;</a>
               </div>
               <p><a href="http://en.wikipedia.org/wiki/Character_encodings_in_HTML#Illegal_characters">http://en.wikipedia.org/wiki/Character_encodings_in_HTML#Illegal_characters</a></p>
 
@@ -706,11 +845,11 @@ is_section_falsey(<span class="hljs-keyword">const</span> <span class="hljs-keyw
         </li>
         
         
-        <li id="section-9">
+        <li id="section-20">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-9">&#182;</a>
+                <a class="pilcrow" href="#section-20">&#182;</a>
               </div>
               <p>Given a mustache template and some JSON, render the HTML.</p>
 

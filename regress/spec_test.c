@@ -206,7 +206,7 @@ main (int argc, char *argv[])
 		 */
 		test_number = i + 1;
 
-		if (test_number == 2 ) {
+		if (test_number <100 ) {
 
 			rval = render( test->template, test->json, &result );
 
