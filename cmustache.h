@@ -12,14 +12,25 @@
 #define MAX_KEYSZ				1024
 #define MAX_SECTION_DEPTH		20
 
-SLIST_HEAD(listhead, entry);
+enum json_type {
+	string_type,
+	number_type,
+	object_type,
+	array_type,
+	true_type,
+	false_type,
+	null_type
+};
 
-struct entry {
+SLIST_HEAD(json, jsonpair);
+
+struct jsonpair {
 	unsigned short	offset;
 	unsigned short length;
 	unsigned short valoffset;
 	unsigned short vallength;
-	SLIST_ENTRY(entry) children;
+	enum json_type type;
+	SLIST_ENTRY(jsonpair) children;
 };
 
 int	render(const char* template, char *json, char **resultp);
@@ -29,6 +40,8 @@ int	index_json(const char *json, size_t jsonlen, unsigned short **indexp);
 int	size_index(const char *json, size_t jsonlen, unsigned short **indexp, unsigned int *iszp);
 
 int	index_json(const char *json, size_t jsonlen, unsigned short **indexp);
+
+int	parse_json(const char *json, struct json *jp);
 
 int	get(const char *json, size_t jsonlen, char section[][MAX_KEYSZ], int sectionidx, const char *key, char **val);
 

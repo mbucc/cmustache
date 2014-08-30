@@ -133,6 +133,13 @@ index_json(const char *json, size_t jsonlen, unsigned short **indexp)
 
 }
 
+
+int
+parse_json(const char *json, struct json *jp)
+{
+	return 0;
+}
+
 // Return 1 if the first non-whitespace character in json is a '{', 0 otherwise.
 int
 is_obj(const char *json, size_t jsonlen) 

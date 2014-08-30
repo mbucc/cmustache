@@ -197,6 +197,26 @@ jsonpath_key_with_dot()
 	cmp_ok(length, "==", 1);
 }
 
+void
+indexjson1()
+{
+	struct json j = {0};
+	char	*json = "{\"a\": 1}";
+	struct jsonpair *jp = 0;
+	int	rval = 0;
+	int	n = 0;
+
+	rval = parse_json(json, &j);
+	ok(!rval, "rval is %d", rval);
+
+	SLIST_FOREACH(jp, &j, children)
+		n++;
+	cmp_ok(n, "==", 1);
+
+	jp = SLIST_FIRST(&j);
+	cmp_ok(jp->type, "==", number_type);
+}
+
 
 int
 main (int argc, char *argv[])
@@ -222,6 +242,8 @@ main (int argc, char *argv[])
 	test_trim();			// 2
 
 	resolve_section();		// 2
+
+	indexjson1();
 	
 	done_testing();
 
