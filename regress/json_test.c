@@ -221,27 +221,27 @@ indexjson1()
 int
 main (int argc, char *argv[])
 {
-	jsonpath_nodot();		// 3
+	jsonpath_nodot();
 
-	jsonpath_drilldown1();	// 3
+	jsonpath_drilldown1();
 
-	jsonpath_drilldown2();	// 3
+	jsonpath_drilldown2();
 
-	jsonpath_fail_lookup();	// 3
+	jsonpath_fail_lookup();
 
-	jsonpath_all_nulls();		// 1
+	jsonpath_all_nulls();
 
-	jsonpath_null_json();	// 3
+	jsonpath_null_json();
 
-	jsonpath_null_key();		// 3
+	jsonpath_null_key();
 
-	jsonpath_key_with_dot();	// 3
+	jsonpath_key_with_dot();
 
-	jsonpath_trim();		// 2
+	jsonpath_trim();
 
-	test_trim();			// 2
+	test_trim();
 
-	resolve_section();		// 2
+	resolve_section();
 
 	indexjson1();
 	
