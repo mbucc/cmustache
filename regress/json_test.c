@@ -217,6 +217,25 @@ parsejson1()
 	cmp_ok(jp->type, "==", number_type);
 }
 
+void
+parsejsontypes()
+{
+	struct json j = {0};
+	char	*json = "{\"a\": 1, \"b\": {}, \"c\": [], \"d\": \"s\", \"e\":false, \"f\":true, \"g\":null}";
+	struct jsonpair *jp = 0;
+	enum jsontype exp[] = {null_type, true_type, false_type, string_type, array_type, object_type, number_type};
+	int	rval = 0;
+	int	n = 0;
+
+	rval = parsejson(json, &j);
+	ok(!rval, "rval is %d", rval);
+
+	SLIST_FOREACH(jp, &j, children) {
+		cmp_ok(jp->type, "==", exp[n]);
+		n++;
+	}
+}
+
 
 int
 main (int argc, char *argv[])
@@ -244,6 +263,8 @@ main (int argc, char *argv[])
 	resolve_section();
 
 	parsejson1();
+
+	parsejsontypes();
 	
 	done_testing();
 
