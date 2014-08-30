@@ -198,7 +198,7 @@ jsonpath_key_with_dot()
 }
 
 void
-indexjson1()
+parsejson1()
 {
 	struct json j = {0};
 	char	*json = "{\"a\": 1}";
@@ -206,7 +206,7 @@ indexjson1()
 	int	rval = 0;
 	int	n = 0;
 
-	rval = parse_json(json, &j);
+	rval = parsejson(json, &j);
 	ok(!rval, "rval is %d", rval);
 
 	SLIST_FOREACH(jp, &j, children)
@@ -243,7 +243,7 @@ main (int argc, char *argv[])
 
 	resolve_section();
 
-	indexjson1();
+	parsejson1();
 	
 	done_testing();
 

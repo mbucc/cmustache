@@ -12,7 +12,7 @@
 #define MAX_KEYSZ				1024
 #define MAX_SECTION_DEPTH		20
 
-enum json_type {
+enum jsontype {
 	string_type,
 	number_type,
 	object_type,
@@ -29,7 +29,7 @@ struct jsonpair {
 	unsigned short length;
 	unsigned short valoffset;
 	unsigned short vallength;
-	enum json_type type;
+	enum jsontype type;
 	SLIST_ENTRY(jsonpair) children;
 };
 
@@ -41,7 +41,7 @@ int	size_index(const char *json, size_t jsonlen, unsigned short **indexp, unsign
 
 int	index_json(const char *json, size_t jsonlen, unsigned short **indexp);
 
-int	parse_json(const char *json, struct json *jp);
+int	parsejson(const char *json, struct json *jp);
 
 int	get(const char *json, size_t jsonlen, char section[][MAX_KEYSZ], int sectionidx, const char *key, char **val);
 

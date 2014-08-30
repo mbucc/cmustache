@@ -133,11 +133,62 @@ index_json(const char *json, size_t jsonlen, unsigned short **indexp)
 
 }
 
+enum jsontype
+valtotype(const char *json, unsigned short offset, unsigned short length)
+{
+	const char *p;
+
+	for (p = json + offset; isspace(*p) && p - json - offset < length; p++)
+		/* EMPTY */
+		;
+
+	switch (*p) {
+		case '{': return object_type; break;
+		case '[': return array_type; break;
+		case 't': return true_type; break;
+		case 'n': return null_type; break;
+		case 'f': return false_type; break;
+		case '0': /* FALLTHROUGH */
+		case '1': /* FALLTHROUGH */
+		case '2': /* FALLTHROUGH */
+		case '3': /* FALLTHROUGH */
+		case '4': /* FALLTHROUGH */
+		case '5': /* FALLTHROUGH */
+		case '6': /* FALLTHROUGH */
+		case '7': /* FALLTHROUGH */
+		case '8': /* FALLTHROUGH */
+		case '9': return number_type; break;
+		default: return string_type; break;
+	}
+}
+
 
 int
-parse_json(const char *json, struct json *jp)
+parsejson(const char *json, struct json *jp)
 {
-	return 0;
+	struct jsonpair *p;
+	unsigned short	*index = 0;
+	int rval = 0;
+
+	SLIST_INIT(jp);
+
+	rval = index_json(json, strlen(json), &index);
+
+	for (size_t i = 0; !rval && index[i]; i += 4) {
+		p = calloc(1, sizeof(*p));
+		if (!p) {
+			rval = ENOMEM;
+			continue;
+		}
+		p->offset = index[i];
+		p->length = index[i + 1];
+		p->valoffset = index[i + 2];
+		p->vallength = index[i + 3];
+		p->type = valtotype(json, p->valoffset, p->vallength);
+		SLIST_INSERT_HEAD(jp, p, children);
+	}
+	
+	return rval;
 }
 
 // Return 1 if the first non-whitespace character in json is a '{', 0 otherwise.
