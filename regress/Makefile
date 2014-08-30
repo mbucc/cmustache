@@ -6,12 +6,13 @@
 D=../deps
 J=${D}/js0n
 E=${D}/chtmlescape
-V=deps/vec
-T=deps/tap.c
+Q=${D}/cqueue
+V=./deps/vec
+T=./deps/tap.c
 
 CC=gcc
 
-CFLAGS=-Wall -I../deps/js0n -I../deps/chtmlescape -I./deps/tap.c -I./deps/vec #-DDEBUG
+CFLAGS=-Wall -I${J} -I${E} -I${T} -I${V} -I${Q} #-DDEBUG
 
 resolution: spec_test
 	./spec_test '../specs/resolution.json'

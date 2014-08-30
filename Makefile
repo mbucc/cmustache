@@ -12,13 +12,16 @@ CCFLAGS=-Wall
 #
 #---------------------------------------------------
 
-dep: deps/js0n deps/chtmlescape
+dep: deps/js0n deps/chtmlescape deps/cqueue
 
 deps/js0n:
 	clib install mbucc/js0n
 
 deps/chtmlescape:
 	clib install mbucc/chtmlescape
+
+deps/cqueue:
+	clib install mbucc/cqueue
 
 #---------------------------------------------------
 #

@@ -12,6 +12,7 @@
 #include "js0n.h"
 #include "j0g.h"
 #include "htmlescape.h"
+#include "queue.h"
 #include "vec.h"
 
 #include "cmustache.h"
@@ -273,15 +274,52 @@ jsonpath(const char *json, size_t jsonlen, const char *key,
 
 }
 
-void
-sectiontocontext(char section[][MAX_KEYSZ], int fromidx, int sections_n, char *dst)
+int
+get_json_section(const char  *json, size_t len, 
+		char section[][MAX_KEYSZ], int base, int depth,
+		unsigned short *offset, unsigned short *length)
+		
 {
-	*dst = '\0';
-	for (int i = fromidx; i < sections_n; i++) {
-		if (i > fromidx)
-			strcat(dst, ".");
-		strcat(dst, section[i]);
+	int		rval = 0;
+
+	for (int i = base; !rval && i < depth && len > 0;i++) {
+		rval = jsonpath(json, len, section[i], offset, length);
+		json += *offset;
+		len = *length;
 	}
+	return rval;
+} 
+
+// Return true if a section is not defined.
+//
+// For example, if section = `{"a", "b"}`
+// and json = `{"a": {"b": 1}}`,
+// is_section_falsey returns false.
+//
+// This simple concept can get complicated fast.
+// For example, the section `{ "a", "b", "c"}`
+// is true for json = `{"a": 1, "b": 1, "c": 1}`
+// and false for json = `{"b": 1, "c": {"a": 1}}`
+
+int
+is_section_falsey(const char *json, size_t jsonlen,
+		char section[][MAX_KEYSZ], int sections_n, int *drop)
+{
+	int		rval = 0;
+	unsigned short	offset = 0;
+	unsigned short	length = 0;
+
+	*drop = 0;
+
+	rval = get_json_section(json, jsonlen, section, 0, sections_n,
+		&offset, &length);
+
+	if (!rval) {
+		if (length == 5 && strncmp(json + offset, "false", 5) == 0)
+			*drop = 1;
+	}
+
+	return rval;
 }
 
 
@@ -290,14 +328,18 @@ peeloff_sections_from_top(const char  * const json, size_t jsonlen,
 		char section[][MAX_KEYSZ], int sections_n, 
 		const char *key, char **val)
 {
-	const char	*p = 0;
-	size_t		len = 0;
 	int		rval = 0;
 	unsigned short	offset = 0;
 	unsigned short	length = 0;
+	unsigned short	section_offset = 0;
+	unsigned short	section_length = 0;
 
 	// Loop through all contexts, starting with first section base.
 	for (int base = 0; !rval && !*val && base < sections_n; base++) {
+
+		rval = get_json_section(json, jsonlen, section, base, sections_n, &offset, &length);
+
+/*
 
 		// Get json starting at current section base.
 		p = json;
@@ -307,16 +349,17 @@ peeloff_sections_from_top(const char  * const json, size_t jsonlen,
 			p += offset;
 			len = length;
 		}
+*/
 
 		// Look for key is in this section's json (aka "context").
-		if (!rval && len)
-			rval = jsonpath(p, len, key, &offset, &length);
+		if (!rval && length)
+			rval = jsonpath(json + section_offset, section_length, key, &offset, &length);
 
 		if (!rval && offset) {
 			// We found the key so make a copy of its value.
 			*val = calloc(length + 1, 1);
 			if (*val)
-				strncat(*val, p + offset, length);
+				strncat(*val, json + offset, length);
 			else
 				rval = ENOMEM;
 		}
@@ -376,18 +419,18 @@ peeloff_sections_from_bottom(const char *json, size_t jsonlen,
 }
 
 
-
 // Lookup a key's value and copy it to \*val.
 // If the key is not found, \*val is set to NULL.
 //
 // If sections_n > 0, the key is looked up in the context of the given section.
 // See the file specs/resolution.json for details on how that works.
 int
-get(const char  * const json, size_t jsonlen, 
+get(const char  *json, size_t jsonlen, 
 		char section[][MAX_KEYSZ], int sections_n, 
 		const char *key, char **val)
 {
 	int		rval = 0;
+	int		drop = 0;
 	unsigned short	offset = 0;
 	unsigned short	length = 0;
 
@@ -402,6 +445,13 @@ get(const char  * const json, size_t jsonlen,
 	// An empty json string is not an error.
 	if (!json || !strlen(json))
 		return 0;
+
+	// If any section is falsey, key is not found.
+	for (int i = 0; i < sections_n; i++) {
+		rval = is_section_falsey(json, jsonlen, section, sections_n, &drop);
+		if (drop)
+			return 0;
+	}
 
 
 	if (!rval)
@@ -577,26 +627,9 @@ pop_section(char *tag, char section[][MAX_KEYSZ], int *sections_n)
 }
 
 int
-is_section_falsey(const char *json, char section[][MAX_KEYSZ], int sections_n, int *drop)
+index_sections(const char *json, char ***section_index)
 {
-	char *val = 0;
-	char	tag[(MAX_KEYSZ + 1) * MAX_SECTION_DEPTH] = {0};
-	int rval = 0;
-
-	*drop = 0;
-	sectiontocontext(section, 0, sections_n, tag);
-	if (tag && strlen(tag))
-		rval = get(json, strlen(json), 0, 0, tag, &val);
-
-		/*
-		 * Only drop section if it is explicitly
-		 * set to falsey in JSON.
-		 */
-
-	if (!rval && val && *val)
-		*drop = !strcmp(val, "false");
-
-	debug_printf("is_section_falsey('%s', '%s') --> %d (rval = %d)\n", json, tag, *drop, rval);
+	int		rval = 0;
 
 	return rval;
 }
@@ -607,6 +640,7 @@ int
 render(const char *template, char *json, char **html)
 {
 	char		section[MAX_SECTION_DEPTH][MAX_KEYSZ] = {{0}};
+	char		**section_index;
 	char		tag[MAX_KEYSZ] = {0};
 	const char	*cur= 0;
 	char		prev;
@@ -619,10 +653,10 @@ render(const char *template, char *json, char **html)
 
 	debug_printf("%s\n", "Starting to render");
 
-		/*
-		 * The states and their transitions.
-		 */
 
+	//
+	// The states and their transitions.
+	//
 
 	static void *gohtml[] =
 	{
@@ -716,11 +750,12 @@ render(const char *template, char *json, char **html)
 		[126 ... 255]	= &&l_no_xraw
 	};
 
-		/*
-		 * Allocate memory to hold HTML.
-		 */
-
+	// Allocate memory to hold HTML.
 	if (!rval) {
+
+		/*
+		 * XXX: Track size and reallocate when necessary.
+		 */
 
 		*html = (char *) calloc(BUFSZ_DELTA, 1);
 
@@ -730,17 +765,14 @@ render(const char *template, char *json, char **html)
 		qhtml = *html;
 	}
 
-		/*
-		 * Start in the HTML state.
-		 */
+	// Index the sections in the json.
+	if (!rval)
+		rval = index_sections(json, &section_index);
 
+	// Start in the HTML state.
 	void **go = gohtml;
 
-		/*
-		 * Process template, one character at a time.
-		 */
-
-
+	// Process template, one character at a time.
 	for(cur = template; *cur && !rval; cur++)
 	{
 		debug_printf("%c\n", *cur);
@@ -755,10 +787,7 @@ render(const char *template, char *json, char **html)
 
 	return rval;
 
-		/*
-		 * The behavior on transition.
-		 */
-
+	// The action on a state transition.
 	l_bad_section:
 		rval = EX_INVALID_SECTION_NAME;
 		goto l_loop;
@@ -841,7 +870,7 @@ render(const char *template, char *json, char **html)
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xpush");
 		rval = push_section(tag, section, &sections_n);
 		if (!rval)
-			rval = is_section_falsey(json, section, sections_n, &drop);
+			rval = is_section_falsey(json, strlen(json), section, sections_n, &drop);
 		memset(tag, 0, MAX_KEYSZ);
 		goto l_loop;
 
@@ -863,7 +892,7 @@ render(const char *template, char *json, char **html)
 		debug_printf("\t\t--> %s (%s)\n", "gohtml", "l_yes_xpop");
 		rval = pop_section(tag, section, &sections_n);
 		if (!rval)
-			rval = is_section_falsey(json, section, sections_n, &drop);
+			rval = is_section_falsey(json, strlen(json), section, sections_n, &drop);
 		memset(tag, 0, MAX_KEYSZ);
 		goto l_loop;
 

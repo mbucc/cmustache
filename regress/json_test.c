@@ -12,8 +12,10 @@
 
 #include "deps/vec/vec.h"
 
+
 #include "j0g.h"
 #include "js0n.h"
+#include "queue.h"
 #include "tap.h"
 
 #include "../cmustache.h"
@@ -87,23 +89,6 @@ resolve_section()
 	is(val, "1");
 
 	free(val);
-}
-
-
-void
-resolve_nested_section()
-{
-	char		section[][MAX_KEYSZ] = { { "a" }, { "b" }, {0} };
-	char		*val = 0;
-	char		*json = "{\"a\": {\"one\": 1}, \"b\": {\"two\": 2}}";
-	int		rval = 0;
-
-	rval = get(json, strlen(json), section, 2, "two", &val);
-	ok(!rval, "rval is %d", rval);
-	is(val, "2");
-
-	free(val);
-
 }
 
 void
@@ -236,10 +221,7 @@ main (int argc, char *argv[])
 
 	test_trim();			// 2
 
-
 	resolve_section();		// 2
-
-	resolve_nested_section();	// 2
 	
 	done_testing();
 

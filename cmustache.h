@@ -1,3 +1,5 @@
+// Must include sys/queue.h before this.
+
 #define	EX_TAG_TOO_LONG				4201
 #define	EX_TOO_MANY_KEYVAL_PAIRS		4202
 #define	EX_JSON_PARSE_ERROR			4203
@@ -7,9 +9,18 @@
 #define	EX_INVALID_SECTION_NAME		4207
 #define	EX_TOO_MANY_SECTIONS		4208
 
-
 #define MAX_KEYSZ				1024
 #define MAX_SECTION_DEPTH		20
+
+SLIST_HEAD(listhead, entry);
+
+struct entry {
+	unsigned short	offset;
+	unsigned short length;
+	unsigned short valoffset;
+	unsigned short vallength;
+	SLIST_ENTRY(entry) children;
+};
 
 int	render(const char* template, char *json, char **resultp);
 

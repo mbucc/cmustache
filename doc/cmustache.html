@@ -447,15 +447,21 @@ then …</p>
 
 }
 
-<span class="hljs-keyword">void</span>
-sectiontocontext(<span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> fromidx, <span class="hljs-keyword">int</span> sections_n, <span class="hljs-keyword">char</span> *dst)
+<span class="hljs-keyword">int</span>
+get_json_section(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>  *json, size_t len, 
+		<span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> base, <span class="hljs-keyword">int</span> depth,
+		<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> *offset, <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> *length)
+		
 {
-	*dst = <span class="hljs-string">'\0'</span>;
-	<span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> i = fromidx; i &lt; sections_n; i++) {
-		<span class="hljs-keyword">if</span> (i &gt; fromidx)
-			<span class="hljs-built_in">strcat</span>(dst, <span class="hljs-string">"."</span>);
-		<span class="hljs-built_in">strcat</span>(dst, section[i]);
-	}</pre></div></div>
+	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
+
+	<span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> i = base; !rval &amp;&amp; i &lt; depth &amp;&amp; len &gt; <span class="hljs-number">0</span>;i++) {
+		rval = jsonpath(json, len, section[i], offset, length);
+		json += *offset;
+		len = *length;
+	}
+	<span class="hljs-keyword">return</span> rval;
+}</pre></div></div>
             
         </li>
         
@@ -466,11 +472,39 @@ sectiontocontext(<span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <s
               <div class="pilwrap ">
                 <a class="pilcrow" href="#section-15">&#182;</a>
               </div>
-              <p>printf(“sectiontocontext(…,%d, %d) —&gt; ‘%s’\n”, fromidx, sections_n, dst);</p>
+              <p>Return true if a section is not defined.</p>
+<p>For example, if section = <code>{&quot;a&quot;, &quot;b&quot;}</code>
+and json = <code>{&quot;a&quot;: {&quot;b&quot;: 1}}</code>,
+is_section_falsey returns false.</p>
+<p>This simple concept can get complicated fast.
+For example, the section <code>{ &quot;a&quot;, &quot;b&quot;, &quot;c&quot;}</code>
+is true for json = <code>{&quot;a&quot;: 1, &quot;b&quot;: 1, &quot;c&quot;: 1}</code>
+and false for json = <code>{&quot;b&quot;: 1, &quot;c&quot;: {&quot;a&quot;: 1}}</code></p>
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>}
+            <div class="content"><div class='highlight'><pre>
+<span class="hljs-keyword">int</span>
+is_section_falsey(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *json, size_t jsonlen,
+		<span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, <span class="hljs-keyword">int</span> *drop)
+{
+	<span class="hljs-keyword">char</span>		*val = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	offset = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	length = <span class="hljs-number">0</span>;
+
+	*drop = <span class="hljs-number">0</span>;
+
+	rval = get_json_section(json, jsonlen, section, <span class="hljs-number">0</span>, sections_n,
+		&amp;offset, &amp;length);
+
+	<span class="hljs-keyword">if</span> (!rval) {
+		<span class="hljs-keyword">if</span> (length == <span class="hljs-number">5</span> &amp;&amp; <span class="hljs-built_in">strncmp</span>(json + offset, <span class="hljs-string">"false"</span>, <span class="hljs-number">5</span>) == <span class="hljs-number">0</span>)
+			*drop = <span class="hljs-number">1</span>;
+	}
+
+	<span class="hljs-keyword">return</span> rval;
+}
 
 
 <span class="hljs-keyword">int</span>
@@ -478,11 +512,11 @@ peeloff_sections_from_top(<span class="hljs-keyword">const</span> <span class="h
 		<span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, 
 		<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *key, <span class="hljs-keyword">char</span> **val)
 {
-	<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>	*p = <span class="hljs-number">0</span>;
-	size_t		len = <span class="hljs-number">0</span>;
 	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
 	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	offset = <span class="hljs-number">0</span>;
-	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	length = <span class="hljs-number">0</span>;</pre></div></div>
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	length = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	section_offset = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	section_length = <span class="hljs-number">0</span>;</pre></div></div>
             
         </li>
         
@@ -497,7 +531,13 @@ peeloff_sections_from_top(<span class="hljs-keyword">const</span> <span class="h
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>	<span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> base = <span class="hljs-number">0</span>; !rval &amp;&amp; !*val &amp;&amp; base &lt; sections_n; base++) {</pre></div></div>
+            <div class="content"><div class='highlight'><pre>	<span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> base = <span class="hljs-number">0</span>; !rval &amp;&amp; !*val &amp;&amp; base &lt; sections_n; base++) {
+
+		rval = get_json_section(json, jsonlen, section, base, sections_n, &amp;offset, &amp;length);
+
+<span class="hljs-comment">/*
+
+</span></pre></div></div>
             
         </li>
         
@@ -518,7 +558,8 @@ peeloff_sections_from_top(<span class="hljs-keyword">const</span> <span class="h
 			rval = jsonpath(p, len, section[i], &amp;offset, &amp;length);
 			p += offset;
 			len = length;
-		}</pre></div></div>
+		}
+*/</pre></div></div>
             
         </li>
         
@@ -533,8 +574,8 @@ peeloff_sections_from_top(<span class="hljs-keyword">const</span> <span class="h
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>		<span class="hljs-keyword">if</span> (!rval &amp;&amp; len)
-			rval = jsonpath(p, len, key, &amp;offset, &amp;length);
+            <div class="content"><div class='highlight'><pre>		<span class="hljs-keyword">if</span> (!rval &amp;&amp; length)
+			rval = jsonpath(json + section_offset, section_length, key, &amp;offset, &amp;length);
 
 		<span class="hljs-keyword">if</span> (!rval &amp;&amp; offset) {</pre></div></div>
             
@@ -553,7 +594,7 @@ peeloff_sections_from_top(<span class="hljs-keyword">const</span> <span class="h
             
             <div class="content"><div class='highlight'><pre>			*val = <span class="hljs-built_in">calloc</span>(length + <span class="hljs-number">1</span>, <span class="hljs-number">1</span>);
 			<span class="hljs-keyword">if</span> (*val)
-				<span class="hljs-built_in">strncat</span>(*val, p + offset, length);
+				<span class="hljs-built_in">strncat</span>(*val, json + offset, length);
 			<span class="hljs-keyword">else</span>
 				rval = ENOMEM;
 		}
@@ -689,11 +730,12 @@ See the file specs/resolution.json for details on how that works.</p>
             </div>
             
             <div class="content"><div class='highlight'><pre><span class="hljs-keyword">int</span>
-get(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>  * <span class="hljs-keyword">const</span> json, size_t jsonlen, 
+get(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>  *json, size_t jsonlen, 
 		<span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, 
 		<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *key, <span class="hljs-keyword">char</span> **val)
 {
 	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">int</span>		drop = <span class="hljs-number">0</span>;
 	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	offset = <span class="hljs-number">0</span>;
 	<span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span>	length = <span class="hljs-number">0</span>;
 
@@ -731,7 +773,26 @@ get(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</spa
             </div>
             
             <div class="content"><div class='highlight'><pre>	<span class="hljs-keyword">if</span> (!json || !<span class="hljs-built_in">strlen</span>(json))
-		<span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+		<span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-28">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-28">&#182;</a>
+              </div>
+              <p>If any section is falsey, key is not found.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>	<span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> i = <span class="hljs-number">0</span>; i &lt; sections_n; i++) {
+		rval = is_section_falsey(json, jsonlen, section, sections_n, &amp;drop);
+		<span class="hljs-keyword">if</span> (drop)
+			<span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+	}
 
 
 	<span class="hljs-keyword">if</span> (!rval)
@@ -770,11 +831,11 @@ get(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</spa
         </li>
         
         
-        <li id="section-28">
+        <li id="section-29">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-28">&#182;</a>
+                <a class="pilcrow" href="#section-29">&#182;</a>
               </div>
               <p>Look up value in JSON for the given key, and insert it into the result.</p>
 
@@ -835,11 +896,11 @@ in(<span class="hljs-keyword">char</span> c, <span class="hljs-keyword">char</sp
         </li>
         
         
-        <li id="section-29">
+        <li id="section-30">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-29">&#182;</a>
+                <a class="pilcrow" href="#section-30">&#182;</a>
               </div>
               <p><a href="http://en.wikipedia.org/wiki/Character_encodings_in_HTML#Illegal_characters">http://en.wikipedia.org/wiki/Character_encodings_in_HTML#Illegal_characters</a></p>
 
@@ -930,26 +991,12 @@ pop_section(<span class="hljs-keyword">char</span> *tag, <span class="hljs-keywo
 }
 
 <span class="hljs-keyword">int</span>
-is_section_falsey(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *json, <span class="hljs-keyword">char</span> section[][MAX_KEYSZ], <span class="hljs-keyword">int</span> sections_n, <span class="hljs-keyword">int</span> *drop)
+index_sections(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *json, <span class="hljs-keyword">char</span> ***section_index)
 {
-	<span class="hljs-keyword">char</span> *val = <span class="hljs-number">0</span>;
-	<span class="hljs-keyword">char</span>	tag[(MAX_KEYSZ + <span class="hljs-number">1</span>) * MAX_SECTION_DEPTH] = {<span class="hljs-number">0</span>};
-	<span class="hljs-keyword">int</span> rval = <span class="hljs-number">0</span>;
+	size_t	i, n;
+	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
 
-	*drop = <span class="hljs-number">0</span>;
-	sectiontocontext(section, <span class="hljs-number">0</span>, sections_n, tag);
-	<span class="hljs-keyword">if</span> (tag &amp;&amp; <span class="hljs-built_in">strlen</span>(tag))
-		rval = get(json, <span class="hljs-built_in">strlen</span>(json), <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, tag, &amp;val);
-
-		<span class="hljs-comment">/*
-		 * Only drop section if it is explicitly
-		 * set to falsey in JSON.
-		 */</span>
-
-	<span class="hljs-keyword">if</span> (!rval &amp;&amp; val &amp;&amp; *val)
-		*drop = !<span class="hljs-built_in">strcmp</span>(val, <span class="hljs-string">"false"</span>);
-
-	debug_printf(<span class="hljs-string">"is_section_falsey('%s', '%s') --&gt; %d (rval = %d)\n"</span>, json, tag, *drop, rval);
+	n = 
 
 	<span class="hljs-keyword">return</span> rval;
 }</pre></div></div>
@@ -957,11 +1004,11 @@ is_section_falsey(<span class="hljs-keyword">const</span> <span class="hljs-keyw
         </li>
         
         
-        <li id="section-30">
+        <li id="section-31">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-30">&#182;</a>
+                <a class="pilcrow" href="#section-31">&#182;</a>
               </div>
               <p>Given a mustache template and some JSON, render the HTML.</p>
 
@@ -971,6 +1018,7 @@ is_section_falsey(<span class="hljs-keyword">const</span> <span class="hljs-keyw
 render(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *<span class="hljs-keyword">template</span>, <span class="hljs-keyword">char</span> *json, <span class="hljs-keyword">char</span> **html)
 {
 	<span class="hljs-keyword">char</span>		section[MAX_SECTION_DEPTH][MAX_KEYSZ] = {{<span class="hljs-number">0</span>}};
+	<span class="hljs-keyword">char</span>		**section_index;
 	<span class="hljs-keyword">char</span>		tag[MAX_KEYSZ] = {<span class="hljs-number">0</span>};
 	<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span>	*cur= <span class="hljs-number">0</span>;
 	<span class="hljs-keyword">char</span>		prev;
@@ -981,13 +1029,22 @@ render(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</
 	<span class="hljs-keyword">int</span>		drop = <span class="hljs-number">0</span>;
 	<span class="hljs-keyword">int</span>		rval = <span class="hljs-number">0</span>;
 
-	debug_printf(<span class="hljs-string">"%s\n"</span>, <span class="hljs-string">"Starting to render"</span>);
+	debug_printf(<span class="hljs-string">"%s\n"</span>, <span class="hljs-string">"Starting to render"</span>);</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-32">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-32">&#182;</a>
+              </div>
+              <p>The states and their transitions.</p>
 
-		<span class="hljs-comment">/*
-		 * The states and their transitions.
-		 */</span>
-
-
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>
 	<span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> *gohtml[] =
 	{
 		[<span class="hljs-number">0</span> ... <span class="hljs-number">122</span>]	= &amp;&amp;l_html,
@@ -1078,13 +1135,26 @@ render(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</
 		[<span class="hljs-number">0</span> ... <span class="hljs-number">124</span>]	= &amp;&amp;l_no_xraw,
 		[ <span class="hljs-string">'}'</span> ]		= &amp;&amp;l_yes_xraw,	<span class="hljs-comment">// 125</span>
 		[<span class="hljs-number">126</span> ... <span class="hljs-number">255</span>]	= &amp;&amp;l_no_xraw
-	};
+	};</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-33">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-33">&#182;</a>
+              </div>
+              <p>Allocate memory to hold HTML.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>	<span class="hljs-keyword">if</span> (!rval) {
 
 		<span class="hljs-comment">/*
-		 * Allocate memory to hold HTML.
+		 * XXX: Track size and reallocate when necessary.
 		 */</span>
-
-	<span class="hljs-keyword">if</span> (!rval) {
 
 		*html = (<span class="hljs-keyword">char</span> *) <span class="hljs-built_in">calloc</span>(BUFSZ_DELTA, <span class="hljs-number">1</span>);
 
@@ -1092,20 +1162,53 @@ render(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</
 			rval = ENOMEM;
 
 		qhtml = *html;
-	}
+	}</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-34">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-34">&#182;</a>
+              </div>
+              <p>Index the sections in the json.</p>
 
-		<span class="hljs-comment">/*
-		 * Start in the HTML state.
-		 */</span>
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>	<span class="hljs-keyword">if</span> (!rval)
+		rval = index_sections(json, &amp;section_index);</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-35">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-35">&#182;</a>
+              </div>
+              <p>Start in the HTML state.</p>
 
-	<span class="hljs-keyword">void</span> **go = gohtml;
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>	<span class="hljs-keyword">void</span> **go = gohtml;</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-36">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-36">&#182;</a>
+              </div>
+              <p>Process template, one character at a time.</p>
 
-		<span class="hljs-comment">/*
-		 * Process template, one character at a time.
-		 */</span>
-
-
-	<span class="hljs-keyword">for</span>(cur = <span class="hljs-keyword">template</span>; *cur &amp;&amp; !rval; cur++)
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>	<span class="hljs-keyword">for</span>(cur = <span class="hljs-keyword">template</span>; *cur &amp;&amp; !rval; cur++)
 	{
 		debug_printf(<span class="hljs-string">"%c\n"</span>, *cur);
 		<span class="hljs-keyword">if</span> (badchar(*cur))
@@ -1117,13 +1220,22 @@ render(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</
 		prevprev = prev;
 	}
 
-	<span class="hljs-keyword">return</span> rval;
+	<span class="hljs-keyword">return</span> rval;</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-37">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-37">&#182;</a>
+              </div>
+              <p>The action on a state transition.</p>
 
-		<span class="hljs-comment">/*
-		 * The behavior on transition.
-		 */</span>
-
-	l_bad_section:
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>	l_bad_section:
 		rval = EX_INVALID_SECTION_NAME;
 		<span class="hljs-keyword">goto</span> l_loop;
 
@@ -1205,7 +1317,7 @@ render(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</
 		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gohtml"</span>, <span class="hljs-string">"l_yes_xpush"</span>);
 		rval = push_section(tag, section, &amp;sections_n);
 		<span class="hljs-keyword">if</span> (!rval)
-			rval = is_section_falsey(json, section, sections_n, &amp;drop);
+			rval = is_section_falsey(json, <span class="hljs-built_in">strlen</span>(json), section, sections_n, &amp;drop);
 		<span class="hljs-built_in">memset</span>(tag, <span class="hljs-number">0</span>, MAX_KEYSZ);
 		<span class="hljs-keyword">goto</span> l_loop;
 
@@ -1227,7 +1339,7 @@ render(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</
 		debug_printf(<span class="hljs-string">"\t\t--&gt; %s (%s)\n"</span>, <span class="hljs-string">"gohtml"</span>, <span class="hljs-string">"l_yes_xpop"</span>);
 		rval = pop_section(tag, section, &amp;sections_n);
 		<span class="hljs-keyword">if</span> (!rval)
-			rval = is_section_falsey(json, section, sections_n, &amp;drop);
+			rval = is_section_falsey(json, <span class="hljs-built_in">strlen</span>(json), section, sections_n, &amp;drop);
 		<span class="hljs-built_in">memset</span>(tag, <span class="hljs-number">0</span>, MAX_KEYSZ);
 		<span class="hljs-keyword">goto</span> l_loop;
 
