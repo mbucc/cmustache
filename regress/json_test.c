@@ -206,7 +206,7 @@ parsejson1()
 	int	rval = 0;
 	int	n = 0;
 
-	rval = parsejson(json, &j);
+	rval = parsejson(json, strlen(json), &j);
 	ok(!rval, "rval is %d", rval);
 
 	SLIST_FOREACH(jp, &j, link)
@@ -227,7 +227,7 @@ parsejsontypes()
 	int	rval = 0;
 	int	n = 0;
 
-	rval = parsejson(json, &j);
+	rval = parsejson(json, strlen(json), &j);
 	ok(!rval, "rval is %d", rval);
 
 	SLIST_FOREACH(jp, &j, link) {
@@ -244,6 +244,7 @@ getpair(const struct json *j, int idx)
 	jp = SLIST_FIRST(j);
 	for (int i = 0; jp && i < idx; i++)
 		jp = SLIST_NEXT(jp, link);
+
 	return jp;
 }
 	
@@ -254,22 +255,52 @@ parsejsontree()
 	struct json j = {0};
 	char	*json = "{\"a\": {\"a0\": 1, \"a1\": 2}, \"b\": { \"b0\": [1,2,3,4], \"b1\": null}, \"c\": true}";
 	struct jsonpair *jp = 0;
-	int	rval = 0;
+	int rval = 0;
+	unsigned short offset = 0;
 
-	rval = parsejson(json, &j);
+	rval = parsejson(json, strlen(json), &j);
 	ok(!rval, "rval is %d", rval);
 
 	jp = getpair(&j, 1);
-	jp = getpair(&jp->children, 0);
-	ok(!strncmp("b0", json + jp->offset, jp->length));
-	ok(!strncmp("[1,2,3,4]", json + jp->valoffset, jp->vallength));
+	offset = jp->valoffset;
+	jp = getpair(&jp->children, 1);
+	ok(!memcmp("b0", json + offset + jp->offset, jp->length)) 
+		|| diag("Got %.2s, not b0", json + offset + jp->offset);
+	ok(!strncmp("[1,2,3,4]", json + offset + jp->valoffset, jp->vallength))
+		|| diag("Got %.10s, not [1,2,3,4]", json + offset + jp->valoffset);
 	cmp_ok(jp->type, "==", array_type);
 }
 
+void
+parsearraywithobj()
+{
+	struct json j = {0};
+	char	*json = "{\"a\": [1,{\"b\":null},3,4] }";
+	struct jsonpair *jp = 0;
+	int rval = 0;
+	unsigned short offset = 0;
+
+	rval = parsejson(json, strlen(json), &j);
+	ok(!rval, "rval is %d", rval);
+
+	jp = getpair(&j, 0);
+	offset = jp->valoffset;
+
+	jp = getpair(&jp->children, 2);
+	offset += jp->valoffset;
+
+	jp = getpair(&jp->children, 0);
+
+	ok(!memcmp("b", json + offset + jp->offset, jp->length)) 
+		|| diag("Got %.1s, not b", json + offset + jp->offset);
+
+	cmp_ok(jp->type, "==", null_type);
+}
 
 int
 main (int argc, char *argv[])
 {
+/*
 	jsonpath_nodot();
 	jsonpath_drilldown1();
 	jsonpath_drilldown2();
@@ -287,6 +318,8 @@ main (int argc, char *argv[])
 	parsejson1();
 	parsejsontypes();
 	parsejsontree();
+*/
+	parsearraywithobj();
 	
 	done_testing();
 }

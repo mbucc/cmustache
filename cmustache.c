@@ -164,7 +164,7 @@ valtotype(const char *json, unsigned short offset, unsigned short length)
 
 
 int
-parsejson(const char *json, struct json *jp)
+parsejson(const char *json, size_t jsonlen, struct json *jp)
 {
 	struct jsonpair *p;
 	unsigned short	*index = 0;
@@ -172,7 +172,7 @@ parsejson(const char *json, struct json *jp)
 
 	SLIST_INIT(jp);
 
-	rval = index_json(json, strlen(json), &index);
+	rval = index_json(json, jsonlen, &index);
 
 	for (size_t i = 0; !rval && index[i]; i += 4) {
 		p = calloc(1, sizeof(*p));
@@ -180,13 +180,20 @@ parsejson(const char *json, struct json *jp)
 			rval = ENOMEM;
 			continue;
 		}
+		SLIST_INIT(&p->children);
 		p->offset = index[i];
 		p->length = index[i + 1];
 		p->valoffset = index[i + 2];
 		p->vallength = index[i + 3];
 		p->type = valtotype(json, p->valoffset, p->vallength);
 		SLIST_INSERT_HEAD(jp, p, link);
+		
+		if (p->type == object_type)
+			parsejson(json + p->valoffset, p->vallength, &p->children);
 	}
+
+	free(index);
+	index = 0;
 	
 	return rval;
 }

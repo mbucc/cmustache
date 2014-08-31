@@ -36,13 +36,11 @@ struct jsonpair {
 
 int	render(const char* template, char *json, char **resultp);
 
-int	index_json(const char *json, size_t jsonlen, unsigned short **indexp);
-
 int	size_index(const char *json, size_t jsonlen, unsigned short **indexp, unsigned int *iszp);
 
 int	index_json(const char *json, size_t jsonlen, unsigned short **indexp);
 
-int	parsejson(const char *json, struct json *jp);
+int	parsejson(const char *json, size_t jsonlen, struct json *jp);
 
 int	get(const char *json, size_t jsonlen, char section[][MAX_KEYSZ], int sectionidx, const char *key, char **val);
 
