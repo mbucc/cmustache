@@ -209,7 +209,7 @@ parsejson1()
 	rval = parsejson(json, &j);
 	ok(!rval, "rval is %d", rval);
 
-	SLIST_FOREACH(jp, &j, children)
+	SLIST_FOREACH(jp, &j, link)
 		n++;
 	cmp_ok(n, "==", 1);
 
@@ -230,10 +230,40 @@ parsejsontypes()
 	rval = parsejson(json, &j);
 	ok(!rval, "rval is %d", rval);
 
-	SLIST_FOREACH(jp, &j, children) {
+	SLIST_FOREACH(jp, &j, link) {
 		cmp_ok(jp->type, "==", exp[n]);
 		n++;
 	}
+}
+
+struct jsonpair *
+getpair(const struct json *j, int idx)
+{
+	struct jsonpair *jp = 0;
+
+	jp = SLIST_FIRST(j);
+	for (int i = 0; jp && i < idx; i++)
+		jp = SLIST_NEXT(jp, link);
+	return jp;
+}
+	
+
+void
+parsejsontree()
+{
+	struct json j = {0};
+	char	*json = "{\"a\": {\"a0\": 1, \"a1\": 2}, \"b\": { \"b0\": [1,2,3,4], \"b1\": null}, \"c\": true}";
+	struct jsonpair *jp = 0;
+	int	rval = 0;
+
+	rval = parsejson(json, &j);
+	ok(!rval, "rval is %d", rval);
+
+	jp = getpair(&j, 1);
+	jp = getpair(&jp->children, 0);
+	ok(!strncmp("b0", json + jp->offset, jp->length));
+	ok(!strncmp("[1,2,3,4]", json + jp->valoffset, jp->vallength));
+	cmp_ok(jp->type, "==", array_type);
 }
 
 
@@ -241,21 +271,13 @@ int
 main (int argc, char *argv[])
 {
 	jsonpath_nodot();
-
 	jsonpath_drilldown1();
-
 	jsonpath_drilldown2();
-
 	jsonpath_fail_lookup();
-
 	jsonpath_all_nulls();
-
 	jsonpath_null_json();
-
 	jsonpath_null_key();
-
 	jsonpath_key_with_dot();
-
 	jsonpath_trim();
 
 	test_trim();
@@ -263,9 +285,8 @@ main (int argc, char *argv[])
 	resolve_section();
 
 	parsejson1();
-
 	parsejsontypes();
+	parsejsontree();
 	
 	done_testing();
-
 }

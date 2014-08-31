@@ -185,7 +185,7 @@ parsejson(const char *json, struct json *jp)
 		p->valoffset = index[i + 2];
 		p->vallength = index[i + 3];
 		p->type = valtotype(json, p->valoffset, p->vallength);
-		SLIST_INSERT_HEAD(jp, p, children);
+		SLIST_INSERT_HEAD(jp, p, link);
 	}
 	
 	return rval;

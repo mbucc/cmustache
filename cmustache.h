@@ -30,7 +30,8 @@ struct jsonpair {
 	unsigned short valoffset;
 	unsigned short vallength;
 	enum jsontype type;
-	SLIST_ENTRY(jsonpair) children;
+	struct json children;
+	SLIST_ENTRY(jsonpair) link;
 };
 
 int	render(const char* template, char *json, char **resultp);
