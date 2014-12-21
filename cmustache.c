@@ -164,6 +164,44 @@ valtotype(const char *json, unsigned short offset, unsigned short length)
 
 
 int
+parsejsonarray(const char *json, size_t jsonlen, struct json *jp)
+{
+	struct jsonpair *p;
+	unsigned short	*index = 0;
+	int rval = 0;
+
+printf("parsejsonarray: %.10s\n", json);
+
+	SLIST_INIT(jp);
+
+	rval = index_json(json, jsonlen, &index);
+
+	for (size_t i = 0; !rval && index[i]; i += 2) {
+		p = calloc(1, sizeof(*p));
+		if (!p) {
+			rval = ENOMEM;
+			continue;
+		}
+		SLIST_INIT(&p->children);
+		p->valoffset = index[i + 1];
+		p->vallength = index[i + 2];
+		p->type = valtotype(json, p->valoffset, p->vallength);
+		SLIST_INSERT_HEAD(jp, p, link);
+		
+		if (p->type == object_type)
+			parsejson(json + p->valoffset, p->vallength, &p->children);
+		else if (p->type == array_type)
+			parsejsonarray(json + p->valoffset, p->vallength, &p->children);
+	}
+
+	free(index);
+	index = 0;
+	
+	return rval;
+}
+
+
+int
 parsejson(const char *json, size_t jsonlen, struct json *jp)
 {
 	struct jsonpair *p;
@@ -190,6 +228,8 @@ parsejson(const char *json, size_t jsonlen, struct json *jp)
 		
 		if (p->type == object_type)
 			parsejson(json + p->valoffset, p->vallength, &p->children);
+		else if (p->type == array_type)
+			parsejsonarray(json + p->valoffset, p->vallength, &p->children);
 	}
 
 	free(index);
