@@ -1,0 +1,13 @@
+This is unfinished.
+
+I started it, but switched to Go before completing it.
+
+
+BTW, the json library I used has released a massive rewrite,
+which may replace lots of the code here.
+
+One useful bit is that this generates test cases directly from
+the YAML specs that come with Mustache.
+
+-- Mark
+Sat Dec 20 23:06:38 EST 2014
